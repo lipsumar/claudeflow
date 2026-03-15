@@ -6,7 +6,7 @@ const { version } = JSON.parse(readFileSync("./package.json", "utf8"));
 
 describe("cli", () => {
   it("prints version with --version", async () => {
-    const { stdout } = await runCli("--version");
+    const { stdout } = await runCli(["--version"]);
     expect(stdout.trim()).toBe(version);
   });
 });

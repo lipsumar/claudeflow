@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { defineCommand, runMain } from "citty";
+import { initConfig } from "../config.js";
 
 const { version } = require("../../package.json");
 
@@ -10,8 +11,11 @@ const main = defineCommand({
     description: "Deterministic workflows for Claude Code",
     version,
   },
-  run() {
-    console.log("claudeflow CLI - not yet implemented");
+  async setup() {
+    await initConfig();
+  },
+  subCommands: {
+    config: () => import("./commands/config.js").then((m) => m.default),
   },
 });
 
