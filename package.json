@@ -14,11 +14,13 @@
     }
   },
   "scripts": {
-    "build": "tsdown"
+    "build": "tsdown",
+    "test": "vitest"
   },
   "devDependencies": {
     "@types/node": "^22",
     "tsdown": "^0.21.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }
