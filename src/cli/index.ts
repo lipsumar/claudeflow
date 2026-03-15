@@ -16,6 +16,7 @@ const main = defineCommand({
   },
   subCommands: {
     config: () => import("./commands/config.js").then((m) => m.default),
+    run: () => import("./commands/run.js").then((m) => m.default),
   },
 });
 

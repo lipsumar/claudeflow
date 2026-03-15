@@ -10,7 +10,7 @@ import {
   initConfig,
   getConfig,
   resetConfig,
-} from "./config";
+} from "./config.js";
 
 describe("defineConfig", () => {
   it("returns the config as-is", () => {

@@ -51,7 +51,7 @@ User code (TypeScript)
 └── defines workflows using the library API
 
 Library (this package)
-├── Workflow engine       — executes the DAG via LangGraph JS
+├── Workflow engine       — executes the DAG, manages state and control flow
 ├── Scripted node runner  — calls the user function directly
 ├── Claude node runner    — manages container lifecycle + streaming
 ├── Sandbox manager       — Docker network + container creation/teardown
@@ -64,6 +64,54 @@ Infrastructure (user-managed, started via CLI)
 ├── Auth-proxy container  — long-lived, injects real API key, never exposes it to sandboxes
 └── Docker bridge network — isolated per run, torn down after run completes
 ```
+
+### Workflow Engine Design
+
+The workflow engine is a custom DAG executor (~100–200 lines). No external graph framework is used — the execution model (filesystem side-effects + shallow state merge) is simple enough to own directly.
+
+#### Execution loop
+
+```
+resolve entry node
+while current !== "__end__":
+  emit node:start
+  if scripted node:
+    call fn(ctx), shallow-merge returned partial into state
+  if claude node:
+    create container, exec claude, stream node:chunk events
+    destroy container
+  emit node:end
+  resolve next node (static edge or conditional edge fn)
+emit run:complete
+```
+
+#### State management
+
+- State is a plain JSON object, initialized by the caller via `initialState`.
+- Only scripted nodes update state (return a partial object, shallow-merged).
+- Claude nodes produce filesystem side-effects only — they do not modify state.
+- The full state is serialized to the run store after each node completes.
+
+#### Edge resolution
+
+Each node has exactly one outgoing edge, which is either:
+
+- **Static**: a fixed target node ID (`addEdge("a", "b")`)
+- **Conditional**: a function `(ctx) => string` returning the next node ID or `"__end__"` (`addConditionalEdge("a", fn)`)
+
+#### Error handling
+
+- If a node throws or a container exits non-zero, the engine emits `node:error`, sets the run status to `failed`, and stops execution.
+- Container cleanup (remove container, remove ACL entry) happens in a `finally` block — always runs even on error.
+
+#### Future: interruption and resumption
+
+The engine serializes `{ currentNode, state, runId }` to the run store after each node. This enables:
+
+- **HITL**: a node can set `status: "interrupted"`, pausing the engine. A `resume(runId)` call rehydrates state and restarts from the interrupted node.
+- **Crash recovery**: if the process dies, the run can be resumed from the last completed node.
+
+This is not implemented in v1 but the per-node state persistence makes it a straightforward addition.
 
 ---
 
