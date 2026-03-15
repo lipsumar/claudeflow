@@ -153,6 +153,44 @@ describe("runWorkflow", () => {
     expect(result.state).toEqual({ x: 1, y: 3, z: 4 });
   });
 
+  it("provides ctx.$ bound to workspace", async () => {
+    const wf = new Workflow({ name: "test" }).addNode(
+      "bash",
+      scriptedNode(async (ctx) => {
+        await ctx.$`echo hello > greeting.txt`;
+        const result = await ctx.$`cat greeting.txt`;
+        return { greeting: result.stdout.trim() };
+      }),
+    );
+
+    const result = await runWorkflow(wf, { initialState: {} });
+
+    expect(result.status).toBe("completed");
+    expect(result.state.greeting).toBe("hello");
+  });
+
+  it("streams ctx.$ output as node:chunk events", async () => {
+    const events: WorkflowEvent[] = [];
+
+    const wf = new Workflow({ name: "test" }).addNode(
+      "bash",
+      scriptedNode(async (ctx) => {
+        await ctx.$`echo hello`;
+        return {};
+      }),
+    );
+
+    await runWorkflow(wf, { initialState: {}, onEvent: (e) => events.push(e) });
+
+    const chunks = events.filter((e) => e.type === "node:chunk");
+    expect(chunks).toContainEqual(
+      expect.objectContaining({ type: "node:chunk", chunk: expect.stringContaining("echo hello") }),
+    );
+    expect(chunks).toContainEqual(
+      expect.objectContaining({ type: "node:chunk", chunk: expect.stringContaining("hello") }),
+    );
+  });
+
   it("throws when running an empty workflow", async () => {
     const wf = new Workflow({ name: "test" });
     await expect(runWorkflow(wf)).rejects.toThrow("Workflow has no nodes");

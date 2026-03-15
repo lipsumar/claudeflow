@@ -1,10 +1,15 @@
+import type { Shell as ZxShell } from "zx";
+
 export type State = Record<string, unknown>;
+
+export type Shell = ZxShell;
 
 export interface RunContext {
   runId: string;
   workspace: string;
   state: State;
   log: (message: string) => void;
+  $: Shell;
 }
 
 export type WorkflowEvent =

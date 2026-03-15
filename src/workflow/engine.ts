@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { $ } from "zx";
 import { getConfig } from "../config.js";
 import type {
   ClaudeNodeDef,
@@ -39,12 +40,23 @@ export async function runWorkflow(
 
   while (current !== END) {
     const nodeDef = workflow.getNode(current);
+    const log = (message: string) =>
+      emit({ type: "node:chunk", nodeId: current, chunk: message });
+    const shell = $({
+      cwd: workspace,
+      quiet: true,
+      log: (entry) => {
+        if (entry.kind === "cmd") log(`$ ${entry.cmd}`);
+        else if (entry.kind === "stdout") log(entry.data.toString());
+        else if (entry.kind === "stderr") log(entry.data.toString());
+      },
+    });
     const ctx: RunContext = {
       runId,
       workspace,
       state,
-      log: (message) =>
-        emit({ type: "node:chunk", nodeId: current, chunk: message }),
+      log,
+      $: shell,
     };
 
     emit({ type: "node:start", nodeId: current, runId });

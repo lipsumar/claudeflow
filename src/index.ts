@@ -9,6 +9,7 @@ export type {
   RunOptions,
   RunResult,
   ScriptedNodeDef,
+  Shell,
   State,
   WorkflowEvent,
 } from "./workflow/types.js";
