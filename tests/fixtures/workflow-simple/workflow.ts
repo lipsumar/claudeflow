@@ -1,12 +1,10 @@
 import { Workflow, scriptedNode } from "../../../src/index.js";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 export default new Workflow({ name: "text-pipeline" })
   .addNode(
     "read_input",
     scriptedNode(async (ctx) => {
-      const text = readFileSync(join(ctx.workspace, "input.txt"), "utf8");
+      const text = (await ctx.$`cat input.txt`).stdout.trim();
       return { text };
     }),
   )
@@ -14,14 +12,14 @@ export default new Workflow({ name: "text-pipeline" })
     "transform",
     scriptedNode(async (ctx) => {
       const upper = (ctx.state.text as string).toUpperCase();
-      writeFileSync(join(ctx.workspace, "output.txt"), upper);
+      await ctx.$`echo ${upper} > output.txt`;
       return { text: upper };
     }),
   )
   .addNode(
     "verify",
     scriptedNode(async (ctx) => {
-      const output = readFileSync(join(ctx.workspace, "output.txt"), "utf8");
+      const output = (await ctx.$`cat output.txt`).stdout.trim();
       return { verified: output === ctx.state.text };
     }),
   )

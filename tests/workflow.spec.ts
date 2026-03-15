@@ -14,27 +14,43 @@ describe("claudeflow run", () => {
     const workspace = mkdtempSync(join(tmpdir(), "claudeflow-test-"));
     writeFileSync(join(workspace, "input.txt"), "hello world");
 
-    const { stdout } = await runCli([
+    const result = await runCli([
       "run",
       fixtureWorkflow,
       "--workspace",
       workspace,
+      "--output",
+      "json",
     ]);
 
     // Verify file was written to workspace
     const output = readFileSync(join(workspace, "output.txt"), "utf8");
-    expect(output).toBe("HELLO WORLD");
+    expect(output).toBe("HELLO WORLD\n");
 
-    // Verify events are emitted in the correct order
-    const lines = stdout.split("\n").filter((l) => l.trim());
-    expect(lines).toEqual([
-      expect.stringContaining("▶ read_input"),
-      expect.stringContaining("✓ read_input"),
-      expect.stringContaining("▶ transform"),
-      expect.stringContaining("✓ transform"),
-      expect.stringContaining("▶ verify"),
-      expect.stringContaining("✓ verify"),
-      expect.stringContaining("completed"),
+    // Parse JSON events from stdout
+    const events = result.stdout
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l));
+
+    const types = events.map(
+      (e: { type: string; nodeId?: string }) =>
+        `${e.type}${e.nodeId ? `:${e.nodeId}` : ""}`,
+    );
+    expect(types).toEqual([
+      "node:start:read_input",
+      "node:chunk:read_input",
+      "node:chunk:read_input",
+      "node:chunk:read_input",
+      "node:end:read_input",
+      "node:start:transform",
+      "node:chunk:transform",
+      "node:end:transform",
+      "node:start:verify",
+      "node:chunk:verify",
+      "node:chunk:verify",
+      "node:end:verify",
+      "run:complete",
     ]);
   });
 });

@@ -32,7 +32,9 @@ describe("runWorkflow", () => {
       )
       .addNode(
         "step2",
-        scriptedNode(async (ctx) => ({ value: (ctx.state.value as number) + 1 })),
+        scriptedNode(async (ctx) => ({
+          value: (ctx.state.value as number) + 1,
+        })),
       )
       .addEdge("step1", "step2");
 
@@ -89,20 +91,26 @@ describe("runWorkflow", () => {
   it("emits streaming events", async () => {
     const events: WorkflowEvent[] = [];
 
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "step1",
-        scriptedNode(async (ctx) => {
-          ctx.log("working...");
-          return { done: true };
-        }),
-      );
+    const wf = new Workflow({ name: "test" }).addNode(
+      "step1",
+      scriptedNode(async (ctx) => {
+        ctx.log.info("working...");
+        return { done: true };
+      }),
+    );
 
     await runWorkflow(wf, { initialState: {}, onEvent: (e) => events.push(e) });
 
     expect(events).toEqual([
       expect.objectContaining({ type: "node:start", nodeId: "step1" }),
-      expect.objectContaining({ type: "node:chunk", nodeId: "step1", chunk: "working..." }),
+      expect.objectContaining({
+        type: "node:chunk",
+        nodeId: "step1",
+        chunk: {
+          level: "info",
+          message: "working...",
+        },
+      }),
       expect.objectContaining({ type: "node:end", nodeId: "step1" }),
       expect.objectContaining({ type: "run:complete", status: "completed" }),
     ]);
@@ -132,7 +140,11 @@ describe("runWorkflow", () => {
     expect(result.status).toBe("failed");
     expect(result.state.reached).toBeUndefined();
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "node:error", nodeId: "fail", error: "boom" }),
+      expect.objectContaining({
+        type: "node:error",
+        nodeId: "fail",
+        error: "boom",
+      }),
     );
   });
 
@@ -184,10 +196,22 @@ describe("runWorkflow", () => {
 
     const chunks = events.filter((e) => e.type === "node:chunk");
     expect(chunks).toContainEqual(
-      expect.objectContaining({ type: "node:chunk", chunk: expect.stringContaining("echo hello") }),
+      expect.objectContaining({
+        type: "node:chunk",
+        chunk: {
+          level: "info",
+          message: expect.stringContaining("echo hello"),
+        },
+      }),
     );
     expect(chunks).toContainEqual(
-      expect.objectContaining({ type: "node:chunk", chunk: expect.stringContaining("hello") }),
+      expect.objectContaining({
+        type: "node:chunk",
+        chunk: {
+          level: "info",
+          message: expect.stringContaining("hello"),
+        },
+      }),
     );
   });
 
@@ -217,7 +241,10 @@ describe("Workflow (definition)", () => {
       scriptedNode(async () => ({})),
     );
     expect(() =>
-      wf.addNode("a", scriptedNode(async () => ({}))),
+      wf.addNode(
+        "a",
+        scriptedNode(async () => ({})),
+      ),
     ).toThrow('Node "a" already exists');
   });
 
@@ -231,9 +258,18 @@ describe("Workflow (definition)", () => {
 
   it("throws on duplicate outgoing edge", () => {
     const wf = new Workflow({ name: "test" })
-      .addNode("a", scriptedNode(async () => ({})))
-      .addNode("b", scriptedNode(async () => ({})))
-      .addNode("c", scriptedNode(async () => ({})))
+      .addNode(
+        "a",
+        scriptedNode(async () => ({})),
+      )
+      .addNode(
+        "b",
+        scriptedNode(async () => ({})),
+      )
+      .addNode(
+        "c",
+        scriptedNode(async () => ({})),
+      )
       .addEdge("a", "b");
 
     expect(() => wf.addEdge("a", "c")).toThrow(

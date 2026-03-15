@@ -4,17 +4,28 @@ export type State = Record<string, unknown>;
 
 export type Shell = ZxShell;
 
+export interface Logger {
+  debug: (message: string) => void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+}
+
 export interface RunContext {
   runId: string;
   workspace: string;
   state: State;
-  log: (message: string) => void;
+  log: Logger;
   $: Shell;
 }
 
+export type NodeChunk =
+  | string
+  | { level: "debug" | "info" | "warn" | "error"; message: string };
+
 export type WorkflowEvent =
   | { type: "node:start"; nodeId: string; runId: string }
-  | { type: "node:chunk"; nodeId: string; chunk: string }
+  | { type: "node:chunk"; nodeId: string; chunk: NodeChunk }
   | { type: "node:end"; nodeId: string; durationMs: number }
   | { type: "node:error"; nodeId: string; error: string }
   | { type: "run:complete"; runId: string; status: "completed" | "failed" };

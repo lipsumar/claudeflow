@@ -17,6 +17,7 @@ import type {
   WorkflowEvent,
 } from "./types.js";
 import { Workflow } from "./workflow.js";
+import { createRunContext } from "./context.js";
 
 const END = "__end__";
 
@@ -40,24 +41,13 @@ export async function runWorkflow(
 
   while (current !== END) {
     const nodeDef = workflow.getNode(current);
-    const log = (message: string) =>
-      emit({ type: "node:chunk", nodeId: current, chunk: message });
-    const shell = $({
-      cwd: workspace,
-      quiet: true,
-      log: (entry) => {
-        if (entry.kind === "cmd") log(`$ ${entry.cmd}`);
-        else if (entry.kind === "stdout") log(entry.data.toString());
-        else if (entry.kind === "stderr") log(entry.data.toString());
-      },
-    });
-    const ctx: RunContext = {
+    const ctx = createRunContext({
       runId,
+      nodeId: current,
       workspace,
       state,
-      log,
-      $: shell,
-    };
+      emit,
+    });
 
     emit({ type: "node:start", nodeId: current, runId });
     const start = Date.now();

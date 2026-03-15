@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { loadWorkflow } from "../../workflow/loader.js";
 import { runWorkflow } from "../../workflow/engine.js";
+import { createRenderer } from "../renderer.js";
 import type { WorkflowEvent } from "../../workflow/types.js";
 
 export default defineCommand({
@@ -18,29 +19,17 @@ export default defineCommand({
       type: "string",
       description: "Path to the workspace directory",
     },
+    output: {
+      type: "string",
+      description: "Output format: pretty (default) or json",
+    },
   },
   async run({ args }) {
     const workflow = await loadWorkflow(args.file);
-
-    const onEvent = (event: WorkflowEvent) => {
-      switch (event.type) {
-        case "node:start":
-          console.log(`▶ ${event.nodeId}`);
-          break;
-        case "node:chunk":
-          process.stdout.write(event.chunk);
-          break;
-        case "node:end":
-          console.log(`✓ ${event.nodeId} (${event.durationMs}ms)`);
-          break;
-        case "node:error":
-          console.error(`✗ ${event.nodeId}: ${event.error}`);
-          break;
-        case "run:complete":
-          console.log(`\nRun ${event.runId} ${event.status}`);
-          break;
-      }
-    };
+    const onEvent: (event: WorkflowEvent) => void =
+      args.output === "json"
+        ? (event) => console.log(JSON.stringify(event))
+        : createRenderer();
 
     const result = await runWorkflow(workflow, {
       onEvent,
