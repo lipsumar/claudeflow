@@ -1,4 +1,24 @@
 {
-  "name": "claudeflow",
-  "packageManager": "yarn@4.13.0"
+  "name": "@lipsumar/claudeflow",
+  "version": "0.0.1",
+  "packageManager": "yarn@4.13.0",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "bin": "./dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "scripts": {
+    "build": "tsdown"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsdown": "^0.21.2",
+    "typescript": "^5.9.3"
+  }
 }
