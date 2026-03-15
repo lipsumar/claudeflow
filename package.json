@@ -22,5 +22,8 @@
     "tsdown": "^0.21.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "citty": "^0.2.1"
   }
 }

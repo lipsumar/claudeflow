@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 
-// CLI entrypoint
-// TODO: implement CLI commands with cac or similar
-console.log("claudeflow CLI - not yet implemented");
+import { defineCommand, runMain } from "citty";
+
+const { version } = require("../../package.json");
+
+const main = defineCommand({
+  meta: {
+    name: "claudeflow",
+    description: "Deterministic workflows for Claude Code",
+    version,
+  },
+  run() {
+    console.log("claudeflow CLI - not yet implemented");
+  },
+});
+
+runMain(main);

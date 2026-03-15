@@ -9,6 +9,8 @@ This project is an NPM package called "@lipsumar/claudeflow":
 
 claudeflow is a Node.js library and CLI tool for defining and running workflows composed of scripted nodes and Claude Code nodes. Claude Code nodes run inside throwaway Docker containers with network isolation via Squid proxy.
 
+See the full spec in [specs/](./specs/index.md).
+
 ## Project structure
 
 - `src/index.ts` — Library public API (re-exports)

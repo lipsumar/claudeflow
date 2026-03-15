@@ -139,6 +139,7 @@ __metadata:
   resolution: "@lipsumar/claudeflow@workspace:."
   dependencies:
     "@types/node": "npm:^22"
+    citty: "npm:^0.2.1"
     tsdown: "npm:^0.21.2"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.1.0"
@@ -554,6 +555,13 @@ __metadata:
   version: 3.0.0
   resolution: "chownr@npm:3.0.0"
   checksum: 10c0/43925b87700f7e3893296c8e9c56cc58f926411cce3a6e5898136daaf08f08b9a8eb76d37d3267e707d0dcc17aed2e2ebdf5848c0c3ce95cf910a919935c1b10
+  languageName: node
+  linkType: hard
+
+"citty@npm:^0.2.1":
+  version: 0.2.1
+  resolution: "citty@npm:0.2.1"
+  checksum: 10c0/504ac5aeb076f750bf5f25d40c730083e8ed6112eac2f00dbe341a223c46ad16893ce73dfdb55b2d0da505100b9678968ee0443637c45b21917db48daa5a6977
   languageName: node
   linkType: hard
 
