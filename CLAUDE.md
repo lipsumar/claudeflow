@@ -22,6 +22,12 @@ claudeflow is a Node.js library and CLI tool for defining and running workflows 
 - `docker/` — Dockerfiles and docker-compose for infrastructure
 - `specs/` — Project specification
 
+## Tests
+
+- Unit tests live in `src/` next to the code they test (e.g. `src/foo.spec.ts`)
+- Integration tests live in `tests/` (e.g. `tests/cli.spec.ts`)
+- `tests/helpers.ts` — shared test utilities (e.g. `runCli()`)
+
 ## Build
 
 Two tsdown entrypoints:
