@@ -1,0 +1,7 @@
+FROM node:20-slim
+
+WORKDIR /app
+COPY auth-proxy.mjs .
+
+EXPOSE 4128
+CMD ["node", "auth-proxy.mjs"]

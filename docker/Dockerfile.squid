@@ -1,0 +1,6 @@
+FROM ubuntu/squid:latest
+
+COPY squid.conf /etc/squid/squid.conf
+RUN mkdir -p /etc/squid/acl && chown proxy:proxy /etc/squid/acl
+
+EXPOSE 3128

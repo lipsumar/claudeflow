@@ -1,0 +1,25 @@
+services:
+  squid:
+    build:
+      context: .
+      dockerfile: Dockerfile.squid
+    container_name: claudeflow-squid
+    ports:
+      - "3128:3128"
+    volumes:
+      - squid-acl:/etc/squid/acl
+    restart: unless-stopped
+
+  auth-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth-proxy
+    container_name: claudeflow-auth-proxy
+    ports:
+      - "4128:4128"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: unless-stopped
+
+volumes:
+  squid-acl:

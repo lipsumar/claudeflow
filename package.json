@@ -6,7 +6,7 @@
   "files": [
     "dist"
   ],
-  "bin": "./dist/index.mjs",
+  "bin": "./dist/cli/index.mjs",
   "exports": {
     ".": {
       "import": "./dist/index.mjs",

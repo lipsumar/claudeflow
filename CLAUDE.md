@@ -7,4 +7,24 @@ This project is an NPM package called "@lipsumar/claudeflow":
 - main branch is `master`
 - CI runs on GitHub Actions (`.github/workflows/ci.yml`)
 
-claudeflow is a CLI application.
+claudeflow is a Node.js library and CLI tool for defining and running workflows composed of scripted nodes and Claude Code nodes. Claude Code nodes run inside throwaway Docker containers with network isolation via Squid proxy.
+
+## Project structure
+
+- `src/index.ts` — Library public API (re-exports)
+- `src/config.ts` — `defineConfig()` and `ClaudeflowConfig` type
+- `src/workflow/` — Core workflow engine
+- `src/nodes/` — Node type factories
+- `src/sandbox/` — Docker isolation layer
+- `src/auth-proxy/` — Minimal HTTP proxy that injects the real ANTHROPIC_API_KEY
+- `src/store/` — run history persistence
+- `src/cli/` — CLI entrypoint and commands
+- `docker/` — Dockerfiles and docker-compose for infrastructure
+- `specs/` — Project specification
+
+## Build
+
+Two tsdown entrypoints:
+
+- `src/index.ts` → `dist/index.mjs` (library, exposed via package.json `exports`)
+- `src/cli/index.ts` → `dist/cli/index.mjs` (CLI, exposed via package.json `bin`)
