@@ -19,5 +19,5 @@ jobs:
       - run: corepack enable
 
       - run: yarn install --immutable
-
+      - run: yarn build
       - run: yarn test --run
