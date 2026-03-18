@@ -4,22 +4,28 @@ import { runWorkflow } from "./engine.js";
 import { scriptedNode } from "../nodes/scripted.js";
 import { claudeNode } from "../nodes/claude.js";
 import { initConfig, resetConfig } from "../config.js";
-import type { WorkflowEvent, RunStore } from "./types.js";
+import type { WorkflowEvent } from "./types.js";
 
-function mockStore() {
+const store = {
+  createRun: vi.fn(),
+  updateRun: vi.fn(),
+  appendEvent: vi.fn(),
+};
+
+vi.mock("../store/run-store.js", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../store/run-store.js")>();
   return {
-    createRun: vi.fn() as unknown as RunStore["createRun"] &
-      ReturnType<typeof vi.fn>,
-    updateRun: vi.fn() as unknown as RunStore["updateRun"] &
-      ReturnType<typeof vi.fn>,
-    appendEvent: vi.fn() as unknown as RunStore["appendEvent"] &
-      ReturnType<typeof vi.fn>,
-  } satisfies RunStore;
-}
+    ...mod,
+    getStore: () => store,
+  };
+});
 
 beforeEach(async () => {
   resetConfig();
   await initConfig();
+  store.createRun.mockReset();
+  store.updateRun.mockReset();
+  store.appendEvent.mockReset();
 });
 
 describe("runWorkflow", () => {
@@ -31,7 +37,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.status).toBe("completed");
@@ -54,7 +59,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.status).toBe("completed");
@@ -81,7 +85,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.status).toBe("completed");
@@ -103,7 +106,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.status).toBe("completed");
@@ -125,7 +127,6 @@ describe("runWorkflow", () => {
     await runWorkflow(wf, {
       initialState: {},
       onEvent: (e) => events.push(e),
-      store: mockStore(),
     });
 
     expect(events).toEqual([
@@ -162,7 +163,6 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(wf, {
       initialState: {},
       onEvent: (e) => events.push(e),
-      store: mockStore(),
     });
 
     expect(result.status).toBe("failed");
@@ -190,7 +190,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.state).toEqual({ x: 1, y: 3, z: 4 });
@@ -208,7 +207,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
 
     expect(result.status).toBe("completed");
@@ -229,7 +227,6 @@ describe("runWorkflow", () => {
     await runWorkflow(wf, {
       initialState: {},
       onEvent: (e) => events.push(e),
-      store: mockStore(),
     });
 
     const chunks = events.filter((e) => e.type === "node:chunk");
@@ -255,9 +252,7 @@ describe("runWorkflow", () => {
 
   it("throws when running an empty workflow", async () => {
     const wf = new Workflow({ name: "test" });
-    await expect(
-      runWorkflow(wf, { store: mockStore() }),
-    ).rejects.toThrow("Workflow has no nodes");
+    await expect(runWorkflow(wf)).rejects.toThrow("Workflow has no nodes");
   });
 
   it("claude node throws not-implemented error", async () => {
@@ -271,7 +266,6 @@ describe("runWorkflow", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store: mockStore(),
     });
     expect(result.status).toBe("failed");
   });
@@ -279,7 +273,6 @@ describe("runWorkflow", () => {
 
 describe("runWorkflow (store integration)", () => {
   it("calls createRun at start with correct args", async () => {
-    const store = mockStore();
     const wf = new Workflow({ name: "my-wf" }).addNode(
       "step",
       scriptedNode(async () => ({ done: true })),
@@ -287,7 +280,6 @@ describe("runWorkflow (store integration)", () => {
 
     const result = await runWorkflow(wf, {
       initialState: { x: 1 },
-      store,
     });
 
     expect(store.createRun).toHaveBeenCalledOnce();
@@ -300,7 +292,6 @@ describe("runWorkflow (store integration)", () => {
   });
 
   it("calls appendEvent for every emitted event", async () => {
-    const store = mockStore();
     const wf = new Workflow({ name: "test" }).addNode(
       "step",
       scriptedNode(async () => ({ done: true })),
@@ -308,7 +299,6 @@ describe("runWorkflow (store integration)", () => {
 
     const result = await runWorkflow(wf, {
       initialState: {},
-      store,
     });
 
     // At minimum: node:start, node:end, run:complete
@@ -320,7 +310,6 @@ describe("runWorkflow (store integration)", () => {
   });
 
   it("calls updateRun at end with final status and state", async () => {
-    const store = mockStore();
     const wf = new Workflow({ name: "test" }).addNode(
       "step",
       scriptedNode(async () => ({ result: 42 })),
@@ -328,7 +317,6 @@ describe("runWorkflow (store integration)", () => {
 
     await runWorkflow(wf, {
       initialState: { x: 1 },
-      store,
     });
 
     expect(store.updateRun).toHaveBeenCalledOnce();
@@ -340,7 +328,6 @@ describe("runWorkflow (store integration)", () => {
   });
 
   it("records failed status on error", async () => {
-    const store = mockStore();
     const wf = new Workflow({ name: "test" }).addNode(
       "fail",
       scriptedNode(async () => {
@@ -348,14 +335,13 @@ describe("runWorkflow (store integration)", () => {
       }),
     );
 
-    await runWorkflow(wf, { initialState: {}, store });
+    await runWorkflow(wf, { initialState: {} });
 
     const [, patch] = store.updateRun.mock.calls[0]!;
     expect(patch.status).toBe("failed");
   });
 
   it("still calls onEvent alongside store.appendEvent", async () => {
-    const store = mockStore();
     const events: WorkflowEvent[] = [];
     const wf = new Workflow({ name: "test" }).addNode(
       "step",
@@ -364,7 +350,6 @@ describe("runWorkflow (store integration)", () => {
 
     await runWorkflow(wf, {
       initialState: {},
-      store,
       onEvent: (e) => events.push(e),
     });
 

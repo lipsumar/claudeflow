@@ -10,7 +10,21 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { WorkflowEvent } from "../workflow/types.js";
 import type { StoredRun, RunListOptions } from "./types.js";
+import { getConfig } from "../config.js";
 import _ from "lodash";
+
+let instance: RunStore | null = null;
+
+export function getStore(): RunStore {
+  if (!instance) {
+    instance = new RunStore(getConfig().store.path);
+  }
+  return instance;
+}
+
+export function resetStore(): void {
+  instance = null;
+}
 
 function expandTilde(p: string): string {
   if (p.startsWith("~/")) {

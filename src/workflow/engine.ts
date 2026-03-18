@@ -6,15 +6,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { $ } from "zx";
 import { getConfig } from "../config.js";
-import { RunStore as RunStoreImpl } from "../store/run-store.js";
+import { getStore } from "../store/run-store.js";
 import type {
   ClaudeNodeDef,
   RunContext,
   RunOptions,
   RunResult,
-  RunStore,
   State,
   WorkflowEvent,
 } from "./types.js";
@@ -37,8 +35,7 @@ export async function runWorkflow(
 
   const state: State = { ...(options.initialState ?? {}) };
   const userEmit = options.onEvent ?? (() => {});
-  const store: RunStore =
-    options.store ?? new RunStoreImpl(config.store.path);
+  const store = getStore();
 
   store.createRun({
     runId,

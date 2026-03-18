@@ -1,10 +1,5 @@
 import { defineCommand } from "citty";
-import { getConfig } from "../../config.js";
-import { RunStore } from "../../store/run-store.js";
-
-function createStore(): RunStore {
-  return new RunStore(getConfig().store.path);
-}
+import { getStore } from "../../store/run-store.js";
 
 const list = defineCommand({
   meta: {
@@ -22,7 +17,7 @@ const list = defineCommand({
     },
   },
   run({ args }) {
-    const store = createStore();
+    const store = getStore();
     const runs = store.list({
       workflow: args.workflow,
       limit: args.limit ? parseInt(args.limit, 10) : 20,
@@ -55,7 +50,7 @@ const show = defineCommand({
     },
   },
   run({ args }) {
-    const store = createStore();
+    const store = getStore();
     const run = store.get(args.runId);
 
     if (!run) {
@@ -80,7 +75,7 @@ const logs = defineCommand({
     },
   },
   run({ args }) {
-    const store = createStore();
+    const store = getStore();
     const events = store.getEvents(args.runId);
 
     if (events.length === 0) {

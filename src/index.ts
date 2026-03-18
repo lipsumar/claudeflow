@@ -18,5 +18,5 @@ export { claudeNode } from "./nodes/claude.js";
 export type { ClaudeNodeOptions } from "./nodes/claude.js";
 export { scriptedNode } from "./nodes/scripted.js";
 
-export { RunStore } from "./store/run-store.js";
+export { RunStore, getStore } from "./store/run-store.js";
 export type { StoredRun, RunListOptions } from "./store/types.js";
