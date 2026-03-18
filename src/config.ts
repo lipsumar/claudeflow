@@ -55,7 +55,7 @@ export const defaultConfig: ResolvedConfig = {
     workspaceRoot: "/tmp/claudeflow/runs",
   },
   store: {
-    path: "~/.claudeflow/runs.db",
+    path: "~/.claudeflow/runs",
   },
 };
 

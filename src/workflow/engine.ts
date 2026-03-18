@@ -8,11 +8,13 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { $ } from "zx";
 import { getConfig } from "../config.js";
+import { RunStore as RunStoreImpl } from "../store/run-store.js";
 import type {
   ClaudeNodeDef,
   RunContext,
   RunOptions,
   RunResult,
+  RunStore,
   State,
   WorkflowEvent,
 } from "./types.js";
@@ -34,7 +36,22 @@ export async function runWorkflow(
   mkdirSync(workspace, { recursive: true });
 
   const state: State = { ...(options.initialState ?? {}) };
-  const emit = options.onEvent ?? (() => {});
+  const userEmit = options.onEvent ?? (() => {});
+  const store: RunStore =
+    options.store ?? new RunStoreImpl(config.store.path);
+
+  store.createRun({
+    runId,
+    workflowName: workflow.name,
+    status: "running",
+    startTime: new Date().toISOString(),
+    initialState: { ...state },
+  });
+
+  const emit = (event: WorkflowEvent) => {
+    store.appendEvent(runId, event);
+    userEmit(event);
+  };
 
   const entryNode = workflow.getEntryNode();
   let current: string = entryNode;
@@ -77,6 +94,13 @@ export async function runWorkflow(
   }
 
   emit({ type: "run:complete", runId, status });
+
+  store.updateRun(runId, {
+    status,
+    endTime: new Date().toISOString(),
+    finalState: { ...state },
+  });
+
   return { runId, status, state };
 }
 

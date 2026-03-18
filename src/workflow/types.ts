@@ -20,6 +20,7 @@ export interface RunContext {
 }
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { StoredRun } from "../store/types.js";
 
 export type NodeChunk =
   | string
@@ -70,10 +71,20 @@ export interface RunResult {
   state: State;
 }
 
+export interface RunStore {
+  createRun(run: StoredRun): void;
+  updateRun(
+    runId: string,
+    patch: Partial<StoredRun>,
+  ): void;
+  appendEvent(runId: string, event: WorkflowEvent): void;
+}
+
 export interface RunOptions {
   initialState?: State;
   workspace?: string | undefined;
   onEvent?: (event: WorkflowEvent) => void;
+  store?: RunStore;
 }
 
 export type ClaudeExecutor = (

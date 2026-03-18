@@ -270,13 +270,13 @@ All Claude node stdout is streamed in real time via the `onChunk` callback and t
 
 ### Run history
 
-All runs are persisted to a local SQLite database (default: `~/.claudeflow/runs.db`). Each run record stores:
+All runs are persisted to local files (default: `~/.claudeflow/runs`). Flat files persist:
 
 - Run ID, workflow name, start/end time, status
 - Full event log (node starts, chunks, errors)
 - Initial and final state snapshots
 
-The database path is configurable.
+The storage path is configurable.
 
 ### Querying runs programmatically
 
@@ -284,9 +284,9 @@ The database path is configurable.
 import { RunStore } from "claudeflow";
 
 const store = new RunStore();
-const runs = await store.list({ workflow: "write-and-test", limit: 10 });
-const run = await store.get(runId);
-const logs = await store.getLogs(runId);
+const runs = store.list({ workflow: "write-and-test", limit: 10 });
+const run = store.get(runId);
+const logs = store.getLogs(runId);
 ```
 
 ---

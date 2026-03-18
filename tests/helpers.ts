@@ -11,5 +11,7 @@ export interface RunCliOptions {
 }
 
 export function runCli(args: string[], options: RunCliOptions = {}) {
-  return execFileAsync("node", [cliBin, ...args], { cwd: options.cwd });
+  return execFileAsync("node", [cliBin, ...args], {
+    cwd: options.cwd || __dirname,
+  });
 }

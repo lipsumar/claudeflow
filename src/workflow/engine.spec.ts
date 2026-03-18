@@ -1,10 +1,21 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Workflow } from "./workflow.js";
 import { runWorkflow } from "./engine.js";
 import { scriptedNode } from "../nodes/scripted.js";
 import { claudeNode } from "../nodes/claude.js";
 import { initConfig, resetConfig } from "../config.js";
-import type { WorkflowEvent } from "./types.js";
+import type { WorkflowEvent, RunStore } from "./types.js";
+
+function mockStore() {
+  return {
+    createRun: vi.fn() as unknown as RunStore["createRun"] &
+      ReturnType<typeof vi.fn>,
+    updateRun: vi.fn() as unknown as RunStore["updateRun"] &
+      ReturnType<typeof vi.fn>,
+    appendEvent: vi.fn() as unknown as RunStore["appendEvent"] &
+      ReturnType<typeof vi.fn>,
+  } satisfies RunStore;
+}
 
 beforeEach(async () => {
   resetConfig();
@@ -18,7 +29,10 @@ describe("runWorkflow", () => {
       scriptedNode(async () => ({ greeting: "hello" })),
     );
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.status).toBe("completed");
     expect(result.state.greeting).toBe("hello");
@@ -38,7 +52,10 @@ describe("runWorkflow", () => {
       )
       .addEdge("step1", "step2");
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.status).toBe("completed");
     expect(result.state.value).toBe(2);
@@ -62,7 +79,10 @@ describe("runWorkflow", () => {
         ctx.state.shouldFix ? "fix" : "skip",
       );
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.status).toBe("completed");
     expect(result.state.fixed).toBe(true);
@@ -81,7 +101,10 @@ describe("runWorkflow", () => {
       )
       .addConditionalEdge("check", () => "__end__");
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.status).toBe("completed");
     expect(result.state.done).toBe(true);
@@ -99,7 +122,11 @@ describe("runWorkflow", () => {
       }),
     );
 
-    await runWorkflow(wf, { initialState: {}, onEvent: (e) => events.push(e) });
+    await runWorkflow(wf, {
+      initialState: {},
+      onEvent: (e) => events.push(e),
+      store: mockStore(),
+    });
 
     expect(events).toEqual([
       expect.objectContaining({ type: "node:start", nodeId: "step1" }),
@@ -135,6 +162,7 @@ describe("runWorkflow", () => {
     const result = await runWorkflow(wf, {
       initialState: {},
       onEvent: (e) => events.push(e),
+      store: mockStore(),
     });
 
     expect(result.status).toBe("failed");
@@ -160,7 +188,10 @@ describe("runWorkflow", () => {
       )
       .addEdge("a", "b");
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.state).toEqual({ x: 1, y: 3, z: 4 });
   });
@@ -175,7 +206,10 @@ describe("runWorkflow", () => {
       }),
     );
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
 
     expect(result.status).toBe("completed");
     expect(result.state.greeting).toBe("hello");
@@ -192,7 +226,11 @@ describe("runWorkflow", () => {
       }),
     );
 
-    await runWorkflow(wf, { initialState: {}, onEvent: (e) => events.push(e) });
+    await runWorkflow(wf, {
+      initialState: {},
+      onEvent: (e) => events.push(e),
+      store: mockStore(),
+    });
 
     const chunks = events.filter((e) => e.type === "node:chunk");
     expect(chunks).toContainEqual(
@@ -217,7 +255,9 @@ describe("runWorkflow", () => {
 
   it("throws when running an empty workflow", async () => {
     const wf = new Workflow({ name: "test" });
-    await expect(runWorkflow(wf)).rejects.toThrow("Workflow has no nodes");
+    await expect(
+      runWorkflow(wf, { store: mockStore() }),
+    ).rejects.toThrow("Workflow has no nodes");
   });
 
   it("claude node throws not-implemented error", async () => {
@@ -229,8 +269,107 @@ describe("runWorkflow", () => {
       }),
     );
 
-    const result = await runWorkflow(wf, { initialState: {} });
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store: mockStore(),
+    });
     expect(result.status).toBe("failed");
+  });
+});
+
+describe("runWorkflow (store integration)", () => {
+  it("calls createRun at start with correct args", async () => {
+    const store = mockStore();
+    const wf = new Workflow({ name: "my-wf" }).addNode(
+      "step",
+      scriptedNode(async () => ({ done: true })),
+    );
+
+    const result = await runWorkflow(wf, {
+      initialState: { x: 1 },
+      store,
+    });
+
+    expect(store.createRun).toHaveBeenCalledOnce();
+    const call = store.createRun.mock.calls[0]![0];
+    expect(call.runId).toBe(result.runId);
+    expect(call.workflowName).toBe("my-wf");
+    expect(call.status).toBe("running");
+    expect(call.initialState).toEqual({ x: 1 });
+    expect(call.startTime).toBeDefined();
+  });
+
+  it("calls appendEvent for every emitted event", async () => {
+    const store = mockStore();
+    const wf = new Workflow({ name: "test" }).addNode(
+      "step",
+      scriptedNode(async () => ({ done: true })),
+    );
+
+    const result = await runWorkflow(wf, {
+      initialState: {},
+      store,
+    });
+
+    // At minimum: node:start, node:end, run:complete
+    expect(store.appendEvent.mock.calls.length).toBeGreaterThanOrEqual(3);
+    // All calls should use the correct runId
+    for (const call of store.appendEvent.mock.calls) {
+      expect(call[0]).toBe(result.runId);
+    }
+  });
+
+  it("calls updateRun at end with final status and state", async () => {
+    const store = mockStore();
+    const wf = new Workflow({ name: "test" }).addNode(
+      "step",
+      scriptedNode(async () => ({ result: 42 })),
+    );
+
+    await runWorkflow(wf, {
+      initialState: { x: 1 },
+      store,
+    });
+
+    expect(store.updateRun).toHaveBeenCalledOnce();
+    const [runId, patch] = store.updateRun.mock.calls[0]!;
+    expect(runId).toBeDefined();
+    expect(patch.status).toBe("completed");
+    expect(patch.finalState).toEqual({ x: 1, result: 42 });
+    expect(patch.endTime).toBeDefined();
+  });
+
+  it("records failed status on error", async () => {
+    const store = mockStore();
+    const wf = new Workflow({ name: "test" }).addNode(
+      "fail",
+      scriptedNode(async () => {
+        throw new Error("boom");
+      }),
+    );
+
+    await runWorkflow(wf, { initialState: {}, store });
+
+    const [, patch] = store.updateRun.mock.calls[0]!;
+    expect(patch.status).toBe("failed");
+  });
+
+  it("still calls onEvent alongside store.appendEvent", async () => {
+    const store = mockStore();
+    const events: WorkflowEvent[] = [];
+    const wf = new Workflow({ name: "test" }).addNode(
+      "step",
+      scriptedNode(async () => ({ done: true })),
+    );
+
+    await runWorkflow(wf, {
+      initialState: {},
+      store,
+      onEvent: (e) => events.push(e),
+    });
+
+    // onEvent should receive the same events as appendEvent
+    expect(events.length).toBe(store.appendEvent.mock.calls.length);
   });
 });
 
