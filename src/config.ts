@@ -1,8 +1,11 @@
 import { createJiti } from "jiti";
-import { resolve } from "node:path";
+import { dirname, resolve, parse as parsePath } from "node:path";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import _ from "lodash";
 
 export interface ClaudeflowConfig {
+  root?: boolean;
   anthropic?: {
     apiKey?: string;
   };
@@ -77,11 +80,12 @@ const CONFIG_FILES = [
   "claudeflow.config.mjs",
 ];
 
-export async function loadConfigFile(
-  cwd: string = process.cwd(),
+/** Load a single config file from a directory (first match wins among extensions). */
+export async function loadConfigFromDir(
+  dir: string,
 ): Promise<ClaudeflowConfig> {
   for (const filename of CONFIG_FILES) {
-    const filepath = resolve(cwd, filename);
+    const filepath = resolve(dir, filename);
     if (!existsSync(filepath)) continue;
 
     const jiti = createJiti(filepath);
@@ -92,22 +96,67 @@ export async function loadConfigFile(
   return {};
 }
 
+function mergeConfigs(
+  a: ClaudeflowConfig,
+  b: ClaudeflowConfig,
+): ClaudeflowConfig {
+  return _.merge({}, a, b);
+}
+
+/**
+ * Walk up from `fromDir` collecting config files, then merge them.
+ * Resolution order (lowest to highest priority):
+ *   1. Home config (~/.claudeflow/claudeflow.config.*)
+ *   2. Ancestor directories (from highest ancestor down to parent of fromDir)
+ *   3. fromDir itself
+ *   4. Programmatic overrides
+ *
+ * Walking stops early if a config with `root: true` is found.
+ */
+export async function loadConfigFile(
+  fromDir?: string,
+): Promise<ClaudeflowConfig> {
+  const homeConfigDir = resolve(homedir(), ".claudeflow");
+  const startDir = fromDir ? resolve(fromDir) : process.cwd();
+
+  // 1. Home config (always loaded as base)
+  const homeConfig = await loadConfigFromDir(homeConfigDir);
+
+  // 2. Walk up from startDir, collecting configs
+  const ancestors: Array<{ dir: string; config: ClaudeflowConfig }> = [];
+  let dir = startDir;
+  while (true) {
+    // Skip home config dir — it's already loaded separately
+    if (dir !== homeConfigDir) {
+      const config = await loadConfigFromDir(dir);
+      ancestors.push({ dir, config });
+      if (config.root) break;
+    }
+
+    const parent = dirname(dir);
+    if (parent === dir) break; // reached filesystem root
+    dir = parent;
+  }
+
+  // Merge: home → farthest ancestor → … → startDir (closest wins)
+  let merged: ClaudeflowConfig = homeConfig;
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    merged = mergeConfigs(merged, ancestors[i]!.config);
+  }
+
+  return merged;
+}
+
 // --- singleton ---
 
 let currentConfig: ResolvedConfig | null = null;
 
 export async function initConfig(
   overrides?: ClaudeflowConfig,
+  fromDir?: string,
 ): Promise<ResolvedConfig> {
-  const fileConfig = await loadConfigFile();
-  // file-level config is the base, explicit overrides win
-  const merged: ClaudeflowConfig = {
-    anthropic: { ...fileConfig.anthropic, ...overrides?.anthropic },
-    squid: { ...fileConfig.squid, ...overrides?.squid },
-    sandbox: { ...fileConfig.sandbox, ...overrides?.sandbox },
-    store: { ...fileConfig.store, ...overrides?.store },
-  };
-  currentConfig = resolveConfig(merged);
+  const fileConfig = await loadConfigFile(fromDir);
+  currentConfig = resolveConfig(mergeConfigs(fileConfig, overrides ?? {}));
   return currentConfig;
 }
 

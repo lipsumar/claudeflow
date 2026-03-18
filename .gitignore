@@ -18,3 +18,5 @@ node_modules
 
 dist
 notes.md
+tests/fixtures/manual
+tests/data

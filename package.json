@@ -21,6 +21,7 @@
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.77",
     "@anthropic-ai/sdk": "^0.79.0",
+    "@types/lodash": "^4",
     "@types/node": "^22",
     "tsdown": "^0.21.2",
     "typescript": "^5.9.3",
@@ -30,6 +31,7 @@
     "chalk": "^5.6.2",
     "citty": "^0.2.1",
     "jiti": "^2.6.1",
+    "lodash": "^4.17.23",
     "ora": "^9.3.0",
     "zx": "^8.8.5"
   }
