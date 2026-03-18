@@ -3,6 +3,9 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 
 export interface ClaudeflowConfig {
+  anthropic?: {
+    apiKey?: string;
+  };
   squid?: {
     containerName?: string;
     port?: number;
@@ -18,6 +21,9 @@ export interface ClaudeflowConfig {
 }
 
 export interface ResolvedConfig {
+  anthropic: {
+    apiKey: string;
+  };
   squid: {
     containerName: string;
     port: number;
@@ -33,6 +39,9 @@ export interface ResolvedConfig {
 }
 
 export const defaultConfig: ResolvedConfig = {
+  anthropic: {
+    apiKey: "",
+  },
   squid: {
     containerName: "claudeflow-squid",
     port: 3128,
@@ -55,6 +64,7 @@ export function resolveConfig(
   overrides: ClaudeflowConfig = {},
 ): ResolvedConfig {
   return {
+    anthropic: { ...defaultConfig.anthropic, ...overrides.anthropic },
     squid: { ...defaultConfig.squid, ...overrides.squid },
     sandbox: { ...defaultConfig.sandbox, ...overrides.sandbox },
     store: { ...defaultConfig.store, ...overrides.store },
@@ -92,6 +102,7 @@ export async function initConfig(
   const fileConfig = await loadConfigFile();
   // file-level config is the base, explicit overrides win
   const merged: ClaudeflowConfig = {
+    anthropic: { ...fileConfig.anthropic, ...overrides?.anthropic },
     squid: { ...fileConfig.squid, ...overrides?.squid },
     sandbox: { ...fileConfig.sandbox, ...overrides?.sandbox },
     store: { ...fileConfig.store, ...overrides?.store },

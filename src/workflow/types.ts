@@ -19,9 +19,12 @@ export interface RunContext {
   $: Shell;
 }
 
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+
 export type NodeChunk =
   | string
-  | { level: "debug" | "info" | "warn" | "error"; message: string };
+  | { level: "debug" | "info" | "warn" | "error"; message: string }
+  | { type: "claude"; message: SDKMessage };
 
 export type WorkflowEvent =
   | { type: "node:start"; nodeId: string; runId: string }
@@ -42,6 +45,7 @@ export interface ClaudeNodeDef {
   allowedDomains: string[];
   env: Record<string, string>;
   timeoutMs: number;
+  model: string;
 }
 
 export type NodeDef = ScriptedNodeDef | ClaudeNodeDef;
@@ -71,3 +75,10 @@ export interface RunOptions {
   workspace?: string | undefined;
   onEvent?: (event: WorkflowEvent) => void;
 }
+
+export type ClaudeExecutor = (
+  def: ClaudeNodeDef,
+  nodeId: string,
+  ctx: RunContext,
+  emit: (event: WorkflowEvent) => void,
+) => Promise<void>;

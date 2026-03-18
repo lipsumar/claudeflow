@@ -18,6 +18,7 @@ import type {
 } from "./types.js";
 import { Workflow } from "./workflow.js";
 import { createRunContext } from "./context.js";
+import { claudeExecutorHost } from "./claudeExecutors/host.js";
 
 const END = "__end__";
 
@@ -57,7 +58,7 @@ export async function runWorkflow(
         const partial = await nodeDef.fn(ctx);
         Object.assign(state, partial);
       } else {
-        await executeClaudeNode(nodeDef, ctx, emit);
+        await executeClaudeNode(nodeDef, current, ctx, emit);
       }
 
       emit({
@@ -96,6 +97,7 @@ function resolveNextNode(
 
 async function executeClaudeNode(
   _def: ClaudeNodeDef,
+  _nodeId: string,
   _ctx: RunContext,
   _emit: (event: WorkflowEvent) => void,
 ): Promise<void> {
@@ -106,7 +108,10 @@ async function executeClaudeNode(
   // 4. Wait for exit
   // 5. Remove container
   // 6. Remove ACL entry
-  throw new Error(
-    "Claude node execution not yet implemented (requires sandbox infrastructure)",
-  );
+
+  if (!getConfig().anthropic.apiKey) {
+    throw new Error("Anthropic API key not configured");
+  }
+
+  await claudeExecutorHost(_def, _nodeId, _ctx, _emit);
 }

@@ -6,6 +6,7 @@ export interface ClaudeNodeOptions {
   allowedDomains?: string[];
   env?: Record<string, string>;
   timeoutMs?: number;
+  model?: string;
 }
 
 export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
@@ -16,5 +17,6 @@ export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
     allowedDomains: options.allowedDomains ?? [],
     env: options.env ?? {},
     timeoutMs: options.timeoutMs ?? 300_000,
+    model: options.model ?? "sonnet",
   };
 }

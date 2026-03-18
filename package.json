@@ -19,6 +19,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
+    "@anthropic-ai/sdk": "^0.79.0",
     "@types/node": "^22",
     "tsdown": "^0.21.2",
     "typescript": "^5.9.3",

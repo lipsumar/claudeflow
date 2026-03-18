@@ -1,6 +1,12 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  BetaTextBlock,
+  BetaThinkingBlock,
+  BetaToolUseBlock,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
-import type { WorkflowEvent } from "../workflow/types.js";
+import type { NodeChunk, WorkflowEvent } from "../workflow/types.js";
 
 export function createRenderer(): (event: WorkflowEvent) => void {
   let spinner: Ora | null = null;
@@ -38,12 +44,9 @@ export function createRenderer(): (event: WorkflowEvent) => void {
 
       case "node:chunk": {
         if (!spinner) break;
-        // Persist current spinner line, print the log, restart spinner
+        const msg = formatChunk(event.chunk);
+        if (msg === null) break;
         spinner.stop();
-        const msg =
-          typeof event.chunk === "string"
-            ? event.chunk
-            : formatLogLine(event.chunk);
         console.log(msg);
         spinner = ora({
           text: chalk.dim(elapsed()),
@@ -90,6 +93,14 @@ export function createRenderer(): (event: WorkflowEvent) => void {
   };
 }
 
+function formatChunk(chunk: NodeChunk): string | null {
+  if (typeof chunk === "string") return chunk;
+  if ("type" in chunk && chunk.type === "claude")
+    return formatClaudeMessage(chunk.message);
+  if ("level" in chunk) return formatLogLine(chunk);
+  return null;
+}
+
 function formatLogLine(chunk: {
   level: "debug" | "info" | "warn" | "error";
   message: string;
@@ -103,5 +114,74 @@ function formatLogLine(chunk: {
       return chalk.yellow(chunk.message);
     case "error":
       return chalk.red(chunk.message);
+  }
+}
+
+function formatClaudeMessage(message: SDKMessage): string | null {
+  switch (message.type) {
+    case "assistant": {
+      const lines: string[] = [];
+      for (const block of message.message.content) {
+        switch (block.type) {
+          case "thinking": {
+            const { thinking } = block as BetaThinkingBlock;
+            if (thinking) lines.push(chalk.dim(thinking));
+            break;
+          }
+          case "tool_use": {
+            const { name, input } = block as BetaToolUseBlock;
+            let line = chalk.cyan(`  ↳ ${name}`);
+            if (input && typeof input === "object") {
+              const summary = formatToolInput(
+                name,
+                input as Record<string, unknown>,
+              );
+              if (summary) line += chalk.dim(` ${summary}`);
+            }
+            lines.push(line);
+            break;
+          }
+          case "text": {
+            const { text } = block as BetaTextBlock;
+            lines.push(text);
+            break;
+          }
+        }
+      }
+      return lines.length > 0 ? lines.join("\n") : null;
+    }
+    case "tool_use_summary":
+      return chalk.dim(`  ${message.summary}`);
+    case "result":
+      if (message.subtype === "success") {
+        return chalk.dim(
+          `cost: $${message.total_cost_usd.toFixed(4)} | ${message.duration_ms}ms`,
+        );
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+function formatToolInput(
+  name: string,
+  input: Record<string, unknown>,
+): string | null {
+  switch (name) {
+    case "Read":
+      return input.file_path as string;
+    case "Edit":
+      return input.file_path as string;
+    case "Write":
+      return input.file_path as string;
+    case "Bash":
+      return `$ ${input.command}`;
+    case "Glob":
+      return input.pattern as string;
+    case "Grep":
+      return `/${input.pattern}/`;
+    default:
+      return null;
   }
 }
