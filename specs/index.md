@@ -104,14 +104,9 @@ Each node has exactly one outgoing edge, which is either:
 - If a node throws or a container exits non-zero, the engine emits `node:error`, sets the run status to `failed`, and stops execution.
 - Container cleanup (remove container, remove ACL entry) happens in a `finally` block — always runs even on error.
 
-#### Future: interruption and resumption
+#### Interruption and resumption
 
-The engine serializes `{ currentNode, state, runId }` to the run store after each node. This enables:
-
-- **HITL**: a node can set `status: "interrupted"`, pausing the engine. A `resume(runId)` call rehydrates state and restarts from the interrupted node.
-- **Crash recovery**: if the process dies, the run can be resumed from the last completed node.
-
-This is not implemented in v1 but the per-node state persistence makes it a straightforward addition.
+See [interruption-and-resumption.md](./interruption-and-resumption.md) for the full spec.
 
 ---
 

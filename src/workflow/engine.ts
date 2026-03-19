@@ -4,67 +4,84 @@
 // + shallow state merge) is simple enough to own directly.
 
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { getConfig } from "../config.js";
 import { getStore } from "../store/run-store.js";
 import type {
-  ClaudeNodeDef,
+  Run,
   RunContext,
   RunOptions,
   RunResult,
   State,
   WorkflowEvent,
+  WorkflowFromFile,
 } from "./types.js";
-import { Workflow } from "./workflow.js";
 import { createRunContext } from "./context.js";
-import { claudeExecutorHost } from "./claudeExecutors/host.js";
+import { executeClaudeNode } from "./executeClaudeNode.js";
 
 const END = "__end__";
 
 export async function runWorkflow(
-  workflow: Workflow,
-  options: RunOptions = {},
+  workflow: WorkflowFromFile,
+  options: RunOptions,
 ): Promise<RunResult> {
-  const runId = randomUUID();
-  const config = getConfig();
-  const workspace =
-    options.workspace ?? resolve(config.sandbox.workspaceRoot, runId);
+  const { executor } = options;
 
-  mkdirSync(workspace, { recursive: true });
+  await executor.init();
 
   const state: State = { ...(options.initialState ?? {}) };
   const userEmit = options.onEvent ?? (() => {});
   const store = getStore();
 
-  store.createRun({
-    runId,
-    workflowName: workflow.name,
+  const run: Run = {
+    runId: randomUUID(),
+    workflow,
+    executor,
+    currentNode: workflow.getEntryNode(),
+    state,
     status: "running",
     startTime: new Date().toISOString(),
     initialState: { ...state },
-  });
+  };
+
+  store.persistRun(run);
 
   const emit = (event: WorkflowEvent) => {
-    store.appendEvent(runId, event);
+    store.appendEvent(run.runId, event);
     userEmit(event);
   };
 
-  const entryNode = workflow.getEntryNode();
-  let current: string = entryNode;
-  let status: "completed" | "failed" = "completed";
+  run.status = await executeLoop(run, emit);
 
-  while (current !== END) {
-    const nodeDef = workflow.getNode(current);
+  run.endTime = new Date().toISOString();
+  run.finalState = { ...state };
+
+  emit({ type: "run:complete", runId: run.runId, status: run.status });
+  store.persistRun(run);
+  await executor.cleanup();
+
+  return { runId: run.runId, status: run.status, state };
+}
+
+async function executeLoop(
+  run: Run,
+  emit: (event: WorkflowEvent) => void,
+): Promise<"completed" | "failed"> {
+  const { workflow, executor, state } = run;
+  const store = getStore();
+
+  while (run.currentNode !== END) {
+    // Checkpoint before each node for future resumption
+    store.persistRun(run);
+
+    const nodeDef = workflow.getNode(run.currentNode);
     const ctx = createRunContext({
-      runId,
-      nodeId: current,
-      workspace,
+      runId: run.runId,
+      nodeId: run.currentNode,
+      executor,
       state,
       emit,
     });
 
-    emit({ type: "node:start", nodeId: current, runId });
+    emit({ type: "node:start", nodeId: run.currentNode, runId: run.runId });
     const start = Date.now();
 
     try {
@@ -72,37 +89,28 @@ export async function runWorkflow(
         const partial = await nodeDef.fn(ctx);
         Object.assign(state, partial);
       } else {
-        await executeClaudeNode(nodeDef, current, ctx, emit);
+        await executeClaudeNode(nodeDef, run.currentNode, ctx, executor, emit);
       }
 
       emit({
         type: "node:end",
-        nodeId: current,
+        nodeId: run.currentNode,
         durationMs: Date.now() - start,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      emit({ type: "node:error", nodeId: current, error: message });
-      status = "failed";
-      break;
+      emit({ type: "node:error", nodeId: run.currentNode, error: message });
+      return "failed";
     }
 
-    current = resolveNextNode(workflow, current, ctx);
+    run.currentNode = resolveNextNode(workflow, run.currentNode, ctx);
   }
 
-  emit({ type: "run:complete", runId, status });
-
-  store.updateRun(runId, {
-    status,
-    endTime: new Date().toISOString(),
-    finalState: { ...state },
-  });
-
-  return { runId, status, state };
+  return "completed";
 }
 
 function resolveNextNode(
-  workflow: Workflow,
+  workflow: WorkflowFromFile,
   current: string,
   ctx: RunContext,
 ): string {
@@ -114,25 +122,4 @@ function resolveNextNode(
     return edge.target;
   }
   return edge.fn(ctx);
-}
-
-async function executeClaudeNode(
-  _def: ClaudeNodeDef,
-  _nodeId: string,
-  _ctx: RunContext,
-  _emit: (event: WorkflowEvent) => void,
-): Promise<void> {
-  // TODO: implement container lifecycle
-  // 1. Write Squid ACL for allowed domains
-  // 2. Create + start container on run network
-  // 3. Exec `claude --print "<prompt>"`, stream stdout as node:chunk
-  // 4. Wait for exit
-  // 5. Remove container
-  // 6. Remove ACL entry
-
-  if (!getConfig().anthropic.apiKey) {
-    throw new Error("Anthropic API key not configured");
-  }
-
-  await claudeExecutorHost(_def, _nodeId, _ctx, _emit);
 }

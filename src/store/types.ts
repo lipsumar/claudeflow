@@ -1,3 +1,4 @@
+import type { SerializedExecutor } from "../executor/types.js";
 import type { State } from "../workflow/types.js";
 
 export interface StoredRun {
@@ -8,6 +9,10 @@ export interface StoredRun {
   endTime?: string;
   initialState: State;
   finalState?: State;
+  currentNode?: string;
+  currentState?: State;
+  executor?: SerializedExecutor;
+  workflowFile?: string;
 }
 
 export interface RunListOptions {

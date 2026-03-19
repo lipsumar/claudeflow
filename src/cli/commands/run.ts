@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { defineCommand } from "citty";
 import { loadWorkflow } from "../../workflow/loader.js";
 import { runWorkflow } from "../../workflow/engine.js";
 import { createRenderer } from "../renderer.js";
+import { HostExecutor } from "../../executor/host.js";
 import type { WorkflowEvent } from "../../workflow/types.js";
 
 export default defineCommand({
@@ -26,14 +30,18 @@ export default defineCommand({
   },
   async run({ args }) {
     const workflow = await loadWorkflow(args.file);
+    const executor = new HostExecutor({
+      workspace: args.workspace ?? join(tmpdir(), `claudeflow-${randomUUID()}`),
+    });
+
     const onEvent: (event: WorkflowEvent) => void =
       args.output === "json"
         ? (event) => console.log(JSON.stringify(event))
         : createRenderer();
 
     const result = await runWorkflow(workflow, {
+      executor,
       onEvent,
-      workspace: args.workspace,
     });
 
     if (result.status === "failed") {

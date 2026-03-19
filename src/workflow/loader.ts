@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
 import type { Workflow } from "./workflow.js";
+import type { WorkflowFromFile } from "./types.js";
 
-export async function loadWorkflow(file: string): Promise<Workflow> {
+export async function loadWorkflow(file: string): Promise<WorkflowFromFile> {
   const filepath = resolve(file);
   const jiti = createJiti(filepath);
   const mod = await jiti.import(filepath);
@@ -19,5 +20,5 @@ export async function loadWorkflow(file: string): Promise<Workflow> {
     throw new Error(`${file} must default-export a Workflow instance`);
   }
 
-  return workflow;
+  return Object.assign(workflow, { filepath }) as WorkflowFromFile;
 }

@@ -1,30 +1,30 @@
-import { spawn } from "node:child_process";
-import { getConfig } from "../../config.js";
-import type { ClaudeExecutor } from "../types.js";
+import { getConfig } from "../config.js";
+import type { Executor } from "../executor/types.js";
+import type { ClaudeNodeDef, RunContext, WorkflowEvent } from "./types.js";
 
-/**
- * The simplest executor: runs claude code directly on the host machine.
- * This is not secure and should not be used in production!
- * This is mostly useful for testing and development.
- */
-export const claudeExecutorHost: ClaudeExecutor = async (
-  def,
-  nodeId,
-  ctx,
-  emit,
-) => {
-  const prompt =
-    typeof def.prompt === "function" ? def.prompt(ctx) : def.prompt;
+export async function executeClaudeNode(
+  def: ClaudeNodeDef,
+  nodeId: string,
+  ctx: RunContext,
+  executor: Executor,
+  emit: (event: WorkflowEvent) => void,
+): Promise<void> {
+  if (!getConfig().anthropic.apiKey) {
+    throw new Error("Anthropic API key not configured");
+  }
+
+  const prompt = typeof def.prompt === "function" ? def.prompt(ctx) : def.prompt;
 
   return new Promise((resolve, reject) => {
     const config = getConfig();
-    const env = {
+    const env: Record<string, string | undefined> = {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       ANTHROPIC_API_KEY: config.anthropic.apiKey,
       ...def.env,
     };
-    const child = spawn(
+
+    const child = executor.spawn(
       "claude",
       [
         "--print",
@@ -36,7 +36,6 @@ export const claudeExecutorHost: ClaudeExecutor = async (
         prompt,
       ],
       {
-        cwd: ctx.workspace,
         env,
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -44,7 +43,7 @@ export const claudeExecutorHost: ClaudeExecutor = async (
 
     let buffer = "";
 
-    child.stdout.on("data", (chunk: Buffer) => {
+    child.stdout!.on("data", (chunk: Buffer) => {
       buffer += chunk.toString();
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
@@ -64,7 +63,7 @@ export const claudeExecutorHost: ClaudeExecutor = async (
       }
     });
 
-    child.stderr.on("data", (chunk: Buffer) => {
+    child.stderr!.on("data", (chunk: Buffer) => {
       emit({
         type: "node:chunk",
         nodeId,
@@ -95,4 +94,4 @@ export const claudeExecutorHost: ClaudeExecutor = async (
       }
     });
   });
-};
+}

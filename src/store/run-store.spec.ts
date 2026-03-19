@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { RunStore } from "./run-store.js";
@@ -29,11 +29,18 @@ function makeRun(overrides: Partial<StoredRun> = {}): StoredRun {
   };
 }
 
+/** Seed a StoredRun directly to disk (replaces old createRun in tests) */
+function seedRun(run: StoredRun): void {
+  const dir = join(tempDir, run.runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "run.json"), JSON.stringify(run, null, 2) + "\n");
+}
+
 describe("RunStore", () => {
-  describe("createRun + get", () => {
+  describe("get", () => {
     it("round-trips a run", () => {
       const run = makeRun();
-      store.createRun(run);
+      seedRun(run);
 
       const retrieved = store.get("run-1");
       expect(retrieved).toEqual(run);
@@ -44,30 +51,9 @@ describe("RunStore", () => {
     });
   });
 
-  describe("updateRun", () => {
-    it("merges patch into existing run", () => {
-      store.createRun(makeRun());
-
-      store.updateRun("run-1", {
-        status: "completed",
-        endTime: "2026-03-17T10:05:00.000Z",
-        finalState: { foo: "bar", result: 42 },
-      });
-
-      const updated = store.get("run-1");
-      expect(updated).toMatchObject({
-        runId: "run-1",
-        status: "completed",
-        endTime: "2026-03-17T10:05:00.000Z",
-        finalState: { foo: "bar", result: 42 },
-        initialState: { foo: "bar" },
-      });
-    });
-  });
-
   describe("appendEvent + getEvents", () => {
     it("appends and retrieves events in order", () => {
-      store.createRun(makeRun());
+      seedRun(makeRun());
 
       const events: WorkflowEvent[] = [
         { type: "node:start", nodeId: "step1", runId: "run-1" },
@@ -89,19 +75,19 @@ describe("RunStore", () => {
 
   describe("list", () => {
     it("lists all runs sorted by startTime descending", () => {
-      store.createRun(
+      seedRun(
         makeRun({
           runId: "run-old",
           startTime: "2026-03-17T08:00:00.000Z",
         }),
       );
-      store.createRun(
+      seedRun(
         makeRun({
           runId: "run-new",
           startTime: "2026-03-17T12:00:00.000Z",
         }),
       );
-      store.createRun(
+      seedRun(
         makeRun({
           runId: "run-mid",
           startTime: "2026-03-17T10:00:00.000Z",
@@ -117,9 +103,9 @@ describe("RunStore", () => {
     });
 
     it("filters by workflow name", () => {
-      store.createRun(makeRun({ runId: "r1", workflowName: "alpha" }));
-      store.createRun(makeRun({ runId: "r2", workflowName: "beta" }));
-      store.createRun(makeRun({ runId: "r3", workflowName: "alpha" }));
+      seedRun(makeRun({ runId: "r1", workflowName: "alpha" }));
+      seedRun(makeRun({ runId: "r2", workflowName: "beta" }));
+      seedRun(makeRun({ runId: "r3", workflowName: "alpha" }));
 
       const runs = store.list({ workflow: "beta" });
       expect(runs).toHaveLength(1);
@@ -127,9 +113,9 @@ describe("RunStore", () => {
     });
 
     it("respects limit", () => {
-      store.createRun(makeRun({ runId: "r1" }));
-      store.createRun(makeRun({ runId: "r2" }));
-      store.createRun(makeRun({ runId: "r3" }));
+      seedRun(makeRun({ runId: "r1" }));
+      seedRun(makeRun({ runId: "r2" }));
+      seedRun(makeRun({ runId: "r3" }));
 
       const runs = store.list({ limit: 2 });
       expect(runs).toHaveLength(2);

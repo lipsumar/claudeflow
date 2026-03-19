@@ -5,14 +5,19 @@ export { Workflow } from "./workflow/workflow.js";
 export { runWorkflow } from "./workflow/engine.js";
 export type {
   ClaudeNodeDef,
+  ExecResult,
+  Run,
   RunContext,
   RunOptions,
   RunResult,
   ScriptedNodeDef,
-  Shell,
   State,
   WorkflowEvent,
+  WorkflowFromFile,
 } from "./workflow/types.js";
+
+export { HostExecutor } from "./executor/host.js";
+export type { Executor } from "./executor/types.js";
 
 export { claudeNode } from "./nodes/claude.js";
 export type { ClaudeNodeOptions } from "./nodes/claude.js";

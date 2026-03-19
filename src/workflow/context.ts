@@ -1,35 +1,32 @@
-import { $ } from "zx";
+import type { Executor } from "../executor/types.js";
 import type { WorkflowEvent, RunContext, Logger } from "./types.js";
 
 export function createRunContext({
   runId,
   nodeId,
-  workspace,
+  executor,
   state,
   emit,
 }: {
   runId: string;
   nodeId: string;
-  workspace: string;
+  executor: Executor;
   state: Record<string, unknown>;
   emit: (event: WorkflowEvent) => void;
 }): RunContext {
   const log = createLogger(nodeId, emit);
-  const shell = $({
-    cwd: workspace,
-    quiet: true,
-    log: (entry) => {
-      if (entry.kind === "cmd") log.info(`$ ${entry.cmd}`);
-      else if (entry.kind === "stdout") log.info(entry.data.toString());
-      else if (entry.kind === "stderr") log.error(entry.data.toString());
-    },
-  });
   const ctx: RunContext = {
     runId,
-    workspace,
+    workspace: executor.workspace,
     state,
     log,
-    $: shell,
+    async exec(cmd, args) {
+      log.info(`$ ${cmd} ${args.join(" ")}`);
+      const result = await executor.exec(cmd, args);
+      if (result.stdout) log.info(result.stdout);
+      if (result.stderr) log.error(result.stderr);
+      return result;
+    },
   };
   return ctx;
 }

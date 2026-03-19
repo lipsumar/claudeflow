@@ -8,10 +8,9 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { WorkflowEvent } from "../workflow/types.js";
+import type { WorkflowEvent, Run } from "../workflow/types.js";
 import type { StoredRun, RunListOptions } from "./types.js";
 import { getConfig } from "../config.js";
-import _ from "lodash";
 
 let instance: RunStore | null = null;
 
@@ -40,17 +39,23 @@ export class RunStore {
     this.basePath = expandTilde(basePath);
   }
 
-  createRun(run: StoredRun): void {
+  persistRun(run: Run): void {
+    const stored: StoredRun = {
+      runId: run.runId,
+      workflowName: run.workflow.name,
+      status: run.status,
+      startTime: run.startTime,
+      initialState: run.initialState,
+      currentNode: run.currentNode,
+      currentState: { ...run.state },
+      executor: run.executor.serialize(),
+      workflowFile: run.workflow.filepath,
+    };
+    if (run.endTime) stored.endTime = run.endTime;
+    if (run.finalState) stored.finalState = run.finalState;
     const dir = join(this.basePath, run.runId);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "run.json"), JSON.stringify(run, null, 2) + "\n");
-  }
-
-  updateRun(runId: string, patch: Partial<StoredRun>): void {
-    const filePath = join(this.basePath, runId, "run.json");
-    const existing = JSON.parse(readFileSync(filePath, "utf8")) as StoredRun;
-    const updated = _.merge({}, existing, patch);
-    writeFileSync(filePath, JSON.stringify(updated, null, 2) + "\n");
+    writeFileSync(join(dir, "run.json"), JSON.stringify(stored, null, 2) + "\n");
   }
 
   appendEvent(runId: string, event: WorkflowEvent): void {

@@ -39,16 +39,15 @@ describe("claudeflow run", () => {
     );
     expect(types).toEqual([
       "node:start:read_input",
-      "node:chunk:read_input",
-      "node:chunk:read_input",
-      "node:chunk:read_input",
+      "node:chunk:read_input", // $ cat input.txt
+      "node:chunk:read_input", // hello world
       "node:end:read_input",
       "node:start:transform",
-      "node:chunk:transform",
+      "node:chunk:transform", // $ sh -c echo ...
       "node:end:transform",
       "node:start:verify",
-      "node:chunk:verify",
-      "node:chunk:verify",
+      "node:chunk:verify", // $ cat output.txt
+      "node:chunk:verify", // HELLO WORLD
       "node:end:verify",
       "run:complete",
     ]);

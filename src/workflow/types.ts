@@ -1,8 +1,9 @@
-import type { Shell as ZxShell } from "zx";
+import type { Executor, ExecResult } from "../executor/types.js";
+import type { Workflow } from "./workflow.js";
+
+export type { ExecResult };
 
 export type State = Record<string, unknown>;
-
-export type Shell = ZxShell;
 
 export interface Logger {
   debug: (message: string) => void;
@@ -16,7 +17,7 @@ export interface RunContext {
   workspace: string;
   state: State;
   log: Logger;
-  $: Shell;
+  exec(cmd: string, args: string[]): Promise<ExecResult>;
 }
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -72,13 +73,21 @@ export interface RunResult {
 
 export interface RunOptions {
   initialState?: State;
-  workspace?: string | undefined;
+  executor: Executor;
   onEvent?: (event: WorkflowEvent) => void;
 }
 
-export type ClaudeExecutor = (
-  def: ClaudeNodeDef,
-  nodeId: string,
-  ctx: RunContext,
-  emit: (event: WorkflowEvent) => void,
-) => Promise<void>;
+export type WorkflowFromFile = Workflow & { filepath: string };
+
+export interface Run {
+  runId: string;
+  workflow: WorkflowFromFile;
+  executor: Executor;
+  currentNode: string;
+  state: State;
+  status: "running" | "completed" | "failed";
+  startTime: string;
+  endTime?: string;
+  initialState: State;
+  finalState?: State;
+}

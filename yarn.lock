@@ -358,7 +358,6 @@ __metadata:
     tsdown: "npm:^0.21.2"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.1.0"
-    zx: "npm:^8.8.5"
   bin:
     claudeflow: ./dist/cli/index.mjs
   languageName: unknown
@@ -2083,14 +2082,5 @@ __metadata:
   version: 2.1.2
   resolution: "yoctocolors@npm:2.1.2"
   checksum: 10c0/b220f30f53ebc2167330c3adc86a3c7f158bcba0236f6c67e25644c3188e2571a6014ffc1321943bb619460259d3d27eb4c9cc58c2d884c1b195805883ec7066
-  languageName: node
-  linkType: hard
-
-"zx@npm:^8.8.5":
-  version: 8.8.5
-  resolution: "zx@npm:8.8.5"
-  bin:
-    zx: build/cli.js
-  checksum: 10c0/1273e4f72cfe35a59041aef5a56fd87318bc4e11947d101810b67e5c486ab30574042938728e8a15e085de985e762b8585fcdaab4cf87fd113153b63a5846611
   languageName: node
   linkType: hard

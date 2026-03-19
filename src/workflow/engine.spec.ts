@@ -4,12 +4,16 @@ import { runWorkflow } from "./engine.js";
 import { scriptedNode } from "../nodes/scripted.js";
 import { claudeNode } from "../nodes/claude.js";
 import { initConfig, resetConfig } from "../config.js";
-import type { WorkflowEvent } from "./types.js";
+import { HostExecutor } from "../executor/host.js";
+import type { WorkflowEvent, WorkflowFromFile } from "./types.js";
 
 const store = {
-  createRun: vi.fn(),
-  updateRun: vi.fn(),
+  persistRun: vi.fn().mockImplementation((run) => {
+    // Snapshot the run state at call time since the object is mutable
+    store._snapshots.push(JSON.parse(JSON.stringify(run)));
+  }),
   appendEvent: vi.fn(),
+  _snapshots: [] as unknown[],
 };
 
 vi.mock("../store/run-store.js", async (importOriginal) => {
@@ -23,19 +27,30 @@ vi.mock("../store/run-store.js", async (importOriginal) => {
 beforeEach(async () => {
   resetConfig();
   await initConfig();
-  store.createRun.mockReset();
-  store.updateRun.mockReset();
+  store.persistRun.mockClear();
+  store._snapshots = [];
   store.appendEvent.mockReset();
 });
 
+function withFilepath(wf: Workflow): WorkflowFromFile {
+  return Object.assign(wf, { filepath: "/test/workflow.ts" }) as WorkflowFromFile;
+}
+
+function createExecutor() {
+  return new HostExecutor({ workspace: "/tmp/claudeflow-test-" + Date.now() });
+}
+
 describe("runWorkflow", () => {
   it("runs a single scripted node", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "greet",
-      scriptedNode(async () => ({ greeting: "hello" })),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "greet",
+        scriptedNode(async () => ({ greeting: "hello" })),
+      ),
     );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -44,20 +59,23 @@ describe("runWorkflow", () => {
   });
 
   it("chains scripted nodes with edges", async () => {
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "step1",
-        scriptedNode(async () => ({ value: 1 })),
-      )
-      .addNode(
-        "step2",
-        scriptedNode(async (ctx) => ({
-          value: (ctx.state.value as number) + 1,
-        })),
-      )
-      .addEdge("step1", "step2");
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "step1",
+          scriptedNode(async () => ({ value: 1 })),
+        )
+        .addNode(
+          "step2",
+          scriptedNode(async (ctx) => ({
+            value: (ctx.state.value as number) + 1,
+          })),
+        )
+        .addEdge("step1", "step2"),
+    );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -66,24 +84,27 @@ describe("runWorkflow", () => {
   });
 
   it("follows conditional edges", async () => {
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "check",
-        scriptedNode(async () => ({ shouldFix: true })),
-      )
-      .addNode(
-        "fix",
-        scriptedNode(async () => ({ fixed: true })),
-      )
-      .addNode(
-        "skip",
-        scriptedNode(async () => ({ skipped: true })),
-      )
-      .addConditionalEdge("check", (ctx) =>
-        ctx.state.shouldFix ? "fix" : "skip",
-      );
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "check",
+          scriptedNode(async () => ({ shouldFix: true })),
+        )
+        .addNode(
+          "fix",
+          scriptedNode(async () => ({ fixed: true })),
+        )
+        .addNode(
+          "skip",
+          scriptedNode(async () => ({ skipped: true })),
+        )
+        .addConditionalEdge("check", (ctx) =>
+          ctx.state.shouldFix ? "fix" : "skip",
+        ),
+    );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -93,18 +114,21 @@ describe("runWorkflow", () => {
   });
 
   it("conditional edge can end the workflow", async () => {
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "check",
-        scriptedNode(async () => ({ done: true })),
-      )
-      .addNode(
-        "unreachable",
-        scriptedNode(async () => ({ reached: true })),
-      )
-      .addConditionalEdge("check", () => "__end__");
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "check",
+          scriptedNode(async () => ({ done: true })),
+        )
+        .addNode(
+          "unreachable",
+          scriptedNode(async () => ({ reached: true })),
+        )
+        .addConditionalEdge("check", () => "__end__"),
+    );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -116,15 +140,18 @@ describe("runWorkflow", () => {
   it("emits streaming events", async () => {
     const events: WorkflowEvent[] = [];
 
-    const wf = new Workflow({ name: "test" }).addNode(
-      "step1",
-      scriptedNode(async (ctx) => {
-        ctx.log.info("working...");
-        return { done: true };
-      }),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "step1",
+        scriptedNode(async (ctx) => {
+          ctx.log.info("working...");
+          return { done: true };
+        }),
+      ),
     );
 
     await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
       onEvent: (e) => events.push(e),
     });
@@ -147,20 +174,23 @@ describe("runWorkflow", () => {
   it("handles node errors gracefully", async () => {
     const events: WorkflowEvent[] = [];
 
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "fail",
-        scriptedNode(async () => {
-          throw new Error("boom");
-        }),
-      )
-      .addNode(
-        "after",
-        scriptedNode(async () => ({ reached: true })),
-      )
-      .addEdge("fail", "after");
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "fail",
+          scriptedNode(async () => {
+            throw new Error("boom");
+          }),
+        )
+        .addNode(
+          "after",
+          scriptedNode(async () => ({ reached: true })),
+        )
+        .addEdge("fail", "after"),
+    );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
       onEvent: (e) => events.push(e),
     });
@@ -177,35 +207,41 @@ describe("runWorkflow", () => {
   });
 
   it("shallow-merges state across nodes", async () => {
-    const wf = new Workflow({ name: "test" })
-      .addNode(
-        "a",
-        scriptedNode(async () => ({ x: 1, y: 2 })),
-      )
-      .addNode(
-        "b",
-        scriptedNode(async () => ({ y: 3, z: 4 })),
-      )
-      .addEdge("a", "b");
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "a",
+          scriptedNode(async () => ({ x: 1, y: 2 })),
+        )
+        .addNode(
+          "b",
+          scriptedNode(async () => ({ y: 3, z: 4 })),
+        )
+        .addEdge("a", "b"),
+    );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
     expect(result.state).toEqual({ x: 1, y: 3, z: 4 });
   });
 
-  it("provides ctx.$ bound to workspace", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "bash",
-      scriptedNode(async (ctx) => {
-        await ctx.$`echo hello > greeting.txt`;
-        const result = await ctx.$`cat greeting.txt`;
-        return { greeting: result.stdout.trim() };
-      }),
+  it("provides ctx.exec bound to workspace", async () => {
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "bash",
+        scriptedNode(async (ctx) => {
+          await ctx.exec("sh", ["-c", "echo hello > greeting.txt"]);
+          const result = await ctx.exec("cat", ["greeting.txt"]);
+          return { greeting: result.stdout.trim() };
+        }),
+      ),
     );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -213,18 +249,21 @@ describe("runWorkflow", () => {
     expect(result.state.greeting).toBe("hello");
   });
 
-  it("streams ctx.$ output as node:chunk events", async () => {
+  it("streams ctx.exec output as node:chunk events", async () => {
     const events: WorkflowEvent[] = [];
 
-    const wf = new Workflow({ name: "test" }).addNode(
-      "bash",
-      scriptedNode(async (ctx) => {
-        await ctx.$`echo hello`;
-        return {};
-      }),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "bash",
+        scriptedNode(async (ctx) => {
+          await ctx.exec("echo", ["hello"]);
+          return {};
+        }),
+      ),
     );
 
     await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
       onEvent: (e) => events.push(e),
     });
@@ -251,20 +290,25 @@ describe("runWorkflow", () => {
   });
 
   it("throws when running an empty workflow", async () => {
-    const wf = new Workflow({ name: "test" });
-    await expect(runWorkflow(wf)).rejects.toThrow("Workflow has no nodes");
+    const wf = withFilepath(new Workflow({ name: "test" }));
+    await expect(
+      runWorkflow(wf, { executor: createExecutor() }),
+    ).rejects.toThrow("Workflow has no nodes");
   });
 
   it("claude node throws not-implemented error", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "claude",
-      claudeNode({
-        image: "test:latest",
-        prompt: "do something",
-      }),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "claude",
+        claudeNode({
+          image: "test:latest",
+          prompt: "do something",
+        }),
+      ),
     );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
     expect(result.status).toBe("failed");
@@ -272,32 +316,45 @@ describe("runWorkflow", () => {
 });
 
 describe("runWorkflow (store integration)", () => {
-  it("calls createRun at start with correct args", async () => {
-    const wf = new Workflow({ name: "my-wf" }).addNode(
-      "step",
-      scriptedNode(async () => ({ done: true })),
+  it("calls persistRun at start and end", async () => {
+    const wf = withFilepath(
+      new Workflow({ name: "my-wf" }).addNode(
+        "step",
+        scriptedNode(async () => ({ done: true })),
+      ),
     );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: { x: 1 },
     });
 
-    expect(store.createRun).toHaveBeenCalledOnce();
-    const call = store.createRun.mock.calls[0]![0];
-    expect(call.runId).toBe(result.runId);
-    expect(call.workflowName).toBe("my-wf");
-    expect(call.status).toBe("running");
-    expect(call.initialState).toEqual({ x: 1 });
-    expect(call.startTime).toBeDefined();
+    // persistRun is called: initial + checkpoint before node + final
+    const snapshots = store._snapshots;
+    expect(snapshots.length).toBeGreaterThanOrEqual(2);
+
+    const first = snapshots[0] as Record<string, unknown>;
+    expect(first.runId).toBe(result.runId);
+    expect(first.status).toBe("running");
+    expect(first.initialState).toEqual({ x: 1 });
+    expect(first.startTime).toBeDefined();
+
+    const last = snapshots[snapshots.length - 1] as Record<string, unknown>;
+    expect(last.status).toBe("completed");
+    expect(last.finalState).toEqual({ x: 1, done: true });
+    expect(last.endTime).toBeDefined();
   });
 
   it("calls appendEvent for every emitted event", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "step",
-      scriptedNode(async () => ({ done: true })),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "step",
+        scriptedNode(async () => ({ done: true })),
+      ),
     );
 
     const result = await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
     });
 
@@ -309,46 +366,36 @@ describe("runWorkflow (store integration)", () => {
     }
   });
 
-  it("calls updateRun at end with final status and state", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "step",
-      scriptedNode(async () => ({ result: 42 })),
+  it("records failed status on error", async () => {
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "fail",
+        scriptedNode(async () => {
+          throw new Error("boom");
+        }),
+      ),
     );
 
     await runWorkflow(wf, {
-      initialState: { x: 1 },
+      executor: createExecutor(),
+      initialState: {},
     });
 
-    expect(store.updateRun).toHaveBeenCalledOnce();
-    const [runId, patch] = store.updateRun.mock.calls[0]!;
-    expect(runId).toBeDefined();
-    expect(patch.status).toBe("completed");
-    expect(patch.finalState).toEqual({ x: 1, result: 42 });
-    expect(patch.endTime).toBeDefined();
-  });
-
-  it("records failed status on error", async () => {
-    const wf = new Workflow({ name: "test" }).addNode(
-      "fail",
-      scriptedNode(async () => {
-        throw new Error("boom");
-      }),
-    );
-
-    await runWorkflow(wf, { initialState: {} });
-
-    const [, patch] = store.updateRun.mock.calls[0]!;
-    expect(patch.status).toBe("failed");
+    const last = store._snapshots[store._snapshots.length - 1] as Record<string, unknown>;
+    expect(last.status).toBe("failed");
   });
 
   it("still calls onEvent alongside store.appendEvent", async () => {
     const events: WorkflowEvent[] = [];
-    const wf = new Workflow({ name: "test" }).addNode(
-      "step",
-      scriptedNode(async () => ({ done: true })),
+    const wf = withFilepath(
+      new Workflow({ name: "test" }).addNode(
+        "step",
+        scriptedNode(async () => ({ done: true })),
+      ),
     );
 
     await runWorkflow(wf, {
+      executor: createExecutor(),
       initialState: {},
       onEvent: (e) => events.push(e),
     });

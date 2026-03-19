@@ -1,7 +1,7 @@
 This project is an NPM package called "@lipsumar/claudeflow":
 
 - uses Yarn v4
-- bundled with tsdown
+- bundled with tsdown (`yarn build`)
 - tested with vitest (`yarn test`)
 - Node 24 (version pinned in `.nvmrc`)
 - main branch is `master`
@@ -28,6 +28,8 @@ See the full spec in [specs/](./specs/index.md).
 
 - Unit tests live in `src/` next to the code they test (e.g. `src/foo.spec.ts`)
 - Integration tests live in `tests/` (e.g. `tests/cli.spec.ts`)
+  - these tests are meant to test the full CLI with no mocking
+  - all imports from claudeflow should be `from "@lipsumar/claudeflow"`
 - `tests/helpers.ts` — shared test utilities (e.g. `runCli()`)
 
 ## Build
@@ -36,3 +38,5 @@ Two tsdown entrypoints:
 
 - `src/index.ts` → `dist/index.mjs` (library, exposed via package.json `exports`)
 - `src/cli/index.ts` → `dist/cli/index.mjs` (CLI, exposed via package.json `bin`)
+
+`yarn build` will not run typecheck - always run `yarn typecheck` to check types.
