@@ -6,6 +6,7 @@ import type {
   RunContext,
   WorkflowEvent,
 } from "../workflow/types.js";
+import { ClaudeProcess } from "./claude-process.js";
 
 export interface ClaudeNodeOptions {
   image: string;
@@ -42,78 +43,53 @@ export async function executeClaudeNode(
   const prompt =
     typeof def.prompt === "function" ? def.prompt(ctx) : def.prompt;
 
+  const config = getConfig();
+  const env: Record<string, string | undefined> = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    ANTHROPIC_API_KEY: config.anthropic.apiKey,
+    ...def.env,
+  };
+
+  const child = executor.spawn(
+    "claude",
+    [
+      "--print",
+      "--model",
+      def.model,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      prompt,
+    ],
+    {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  const proc = new ClaudeProcess(child);
+
   return new Promise((resolve, reject) => {
-    const config = getConfig();
-    const env: Record<string, string | undefined> = {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      ANTHROPIC_API_KEY: config.anthropic.apiKey,
-      ...def.env,
-    };
-
-    const child = executor.spawn(
-      "claude",
-      [
-        "--print",
-        "--model",
-        def.model,
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        prompt,
-      ],
-      {
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-
-    let buffer = "";
-
-    child.stdout!.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const message = JSON.parse(line);
-          emit({
-            type: "node:chunk",
-            nodeId,
-            chunk: { type: "claude", message },
-          });
-        } catch {
-          // Incomplete JSON, skip
-        }
-      }
-    });
-
-    child.stderr!.on("data", (chunk: Buffer) => {
+    proc.on("message", (message) => {
       emit({
         type: "node:chunk",
         nodeId,
-        chunk: { level: "error", message: chunk.toString() },
+        chunk: { type: "claude", message },
       });
     });
 
-    child.on("error", reject);
+    proc.on("stderr", (data) => {
+      emit({
+        type: "node:chunk",
+        nodeId,
+        chunk: { level: "error", message: data },
+      });
+    });
 
-    child.on("close", (code) => {
-      if (buffer.trim()) {
-        try {
-          const message = JSON.parse(buffer);
-          emit({
-            type: "node:chunk",
-            nodeId,
-            chunk: { type: "claude", message },
-          });
-        } catch {
-          // ignore
-        }
-      }
+    proc.on("error", reject);
 
+    proc.on("close", (code) => {
       if (code === 0) {
         resolve({});
       } else {
