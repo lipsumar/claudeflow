@@ -39,6 +39,7 @@ const main = defineCommand({
     config: () => import("./commands/config.js").then((m) => m.default),
     run: () => import("./commands/run.js").then((m) => m.default),
     runs: () => import("./commands/runs.js").then((m) => m.default),
+    resume: () => import("./commands/resume.js").then((m) => m.default),
   },
 });
 

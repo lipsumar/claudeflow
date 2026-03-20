@@ -1,10 +1,10 @@
 import type { SerializedExecutor } from "../executor/types.js";
-import type { State } from "../workflow/types.js";
+import type { InterruptMetadata, State } from "../workflow/types.js";
 
 export interface StoredRun {
   runId: string;
   workflowName: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   startTime: string; // ISO 8601
   endTime?: string;
   initialState: State;
@@ -13,6 +13,7 @@ export interface StoredRun {
   currentState?: State;
   executor?: SerializedExecutor;
   workflowFile?: string;
+  interruptMetadata?: InterruptMetadata;
 }
 
 export interface RunListOptions {

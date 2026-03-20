@@ -1,11 +1,8 @@
-// Workflow DAG executor
-// Custom engine: walks the node graph, manages state, emits streaming events.
-// No external graph framework — the execution model (filesystem side-effects
-// + shallow state merge) is simple enough to own directly.
-
 import { randomUUID } from "node:crypto";
 import { getStore } from "../store/run-store.js";
 import type {
+  NodeResult,
+  ResumeOptions,
   Run,
   RunContext,
   RunOptions,
@@ -15,7 +12,12 @@ import type {
   WorkflowFromFile,
 } from "./types.js";
 import { createRunContext } from "./context.js";
-import { executeClaudeNode } from "./executeClaudeNode.js";
+
+import { loadWorkflow } from "./loader.js";
+import type { StoredRun } from "../store/types.js";
+import { HostExecutor } from "../executor/index.js";
+import { executeInterruptNode } from "../nodes/interrupt.js";
+import { executeClaudeNode } from "../nodes/claude.js";
 
 const END = "__end__";
 
@@ -28,8 +30,6 @@ export async function runWorkflow(
   await executor.init();
 
   const state: State = { ...(options.initialState ?? {}) };
-  const userEmit = options.onEvent ?? (() => {});
-  const store = getStore();
 
   const run: Run = {
     runId: randomUUID(),
@@ -39,34 +39,52 @@ export async function runWorkflow(
     state,
     status: "running",
     startTime: new Date().toISOString(),
-    initialState: { ...state },
+    initialState: { ...state }, // maybe remove ? what is it used for ?
   };
 
-  store.persistRun(run);
+  return executeLoop(run, options.onEvent);
+}
 
-  const emit = (event: WorkflowEvent) => {
-    store.appendEvent(run.runId, event);
-    userEmit(event);
+export async function resumeWorkflow(
+  storedRun: StoredRun,
+  options: ResumeOptions,
+): Promise<RunResult> {
+  if (!storedRun.workflowFile) {
+    throw new Error("Can not resume run without workflowFile");
+  }
+  if (!storedRun.executor) {
+    throw new Error("Can not resume run without executor");
+  }
+  const workflow = await loadWorkflow(storedRun.workflowFile);
+  // we need to know which type of executor to properly hydrate
+  const executor = HostExecutor.hydrate(storedRun.executor);
+  const run: Run = {
+    runId: storedRun.runId,
+    workflow,
+    executor,
+    currentNode: workflow.getEntryNode(),
+    state: { ...storedRun.currentState },
+    status: storedRun.status,
+    startTime: storedRun.startTime,
+    initialState: { ...storedRun.initialState },
+    resumeInput: options.input,
   };
 
-  run.status = await executeLoop(run, emit);
-
-  run.endTime = new Date().toISOString();
-  run.finalState = { ...state };
-
-  emit({ type: "run:complete", runId: run.runId, status: run.status });
-  store.persistRun(run);
-  await executor.cleanup();
-
-  return { runId: run.runId, status: run.status, state };
+  return executeLoop(run, options.onEvent);
 }
 
 async function executeLoop(
   run: Run,
-  emit: (event: WorkflowEvent) => void,
-): Promise<"completed" | "failed"> {
+  onEvent?: (event: WorkflowEvent) => void,
+): Promise<RunResult> {
   const { workflow, executor, state } = run;
   const store = getStore();
+
+  const userEmit = onEvent ?? (() => {});
+  const emit = (event: WorkflowEvent) => {
+    store.appendEvent(run.runId, event);
+    userEmit(event);
+  };
 
   while (run.currentNode !== END) {
     // Checkpoint before each node for future resumption
@@ -85,11 +103,45 @@ async function executeLoop(
     const start = Date.now();
 
     try {
+      let nodeResult: NodeResult;
       if (nodeDef.type === "scripted") {
+        //todo: scripted nodes should be able to interrupt.
+        // either by returning interrupt or maybe throwing
         const partial = await nodeDef.fn(ctx);
-        Object.assign(state, partial);
+        nodeResult = { state: partial };
+      } else if (nodeDef.type === "interrupt") {
+        nodeResult = executeInterruptNode(run.resumeInput || "", ctx, nodeDef);
       } else {
-        await executeClaudeNode(nodeDef, run.currentNode, ctx, executor, emit);
+        nodeResult = await executeClaudeNode(
+          nodeDef,
+          run.currentNode,
+          ctx,
+          executor,
+          emit,
+        );
+      }
+
+      // detect interruption
+      if (nodeResult.interrupted) {
+        run.status = "interrupted";
+        run.endTime = new Date().toISOString();
+        run.interruptMetadata = nodeResult.interruptMetadata;
+        store.persistRun(run);
+        emit({
+          type: "node:interrupted",
+          nodeId: run.currentNode,
+        });
+        emit({
+          type: "run:interrupted",
+          runId: run.runId,
+          status: "interrupted",
+        });
+        return { runId: run.runId, status: run.status, state: run.state };
+      }
+
+      // if might not be needed
+      if (nodeResult.state) {
+        Object.assign(state, nodeResult.state);
       }
 
       emit({
@@ -99,14 +151,25 @@ async function executeLoop(
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      run.status = "failed";
+      run.endTime = new Date().toISOString();
+      store.persistRun(run);
+      // cleanup executor ?
       emit({ type: "node:error", nodeId: run.currentNode, error: message });
-      return "failed";
+      return { runId: run.runId, status: run.status, state: run.state };
     }
 
     run.currentNode = resolveNextNode(workflow, run.currentNode, ctx);
   }
 
-  return "completed";
+  run.status = "completed";
+  run.endTime = new Date().toISOString();
+  run.finalState = { ...state }; // remove finalState ? what is it used for ?
+  store.persistRun(run);
+  await executor.cleanup();
+  emit({ type: "run:complete", runId: run.runId, status: run.status });
+
+  return { runId: run.runId, status: run.status, state: run.state };
 }
 
 function resolveNextNode(

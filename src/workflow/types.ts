@@ -32,7 +32,17 @@ export type WorkflowEvent =
   | { type: "node:chunk"; nodeId: string; chunk: NodeChunk }
   | { type: "node:end"; nodeId: string; durationMs: number }
   | { type: "node:error"; nodeId: string; error: string }
-  | { type: "run:complete"; runId: string; status: "completed" | "failed" };
+  | { type: "node:interrupted"; nodeId: string }
+  | {
+      type: "run:complete";
+      runId: string;
+      status: "completed" | "failed";
+    }
+  | {
+      type: "run:interrupted";
+      runId: string;
+      status: "interrupted";
+    };
 
 export interface ScriptedNodeDef {
   type: "scripted";
@@ -49,7 +59,28 @@ export interface ClaudeNodeDef {
   model: string;
 }
 
-export type NodeDef = ScriptedNodeDef | ClaudeNodeDef;
+export interface InterruptNodeDef {
+  type: "interrupt";
+  question: string | ((ctx: RunContext) => string);
+  storeAs: string;
+}
+
+export type NodeDef = ScriptedNodeDef | ClaudeNodeDef | InterruptNodeDef;
+
+export interface NodeResult {
+  /** State updates to shallow-merge (scripted nodes only). */
+  state?: Partial<State>;
+  /** If true, the engine stops the loop with status "interrupted". */
+  interrupted?: boolean;
+  /** Metadata about the interruption. Opaque to the engine. */
+  interruptMetadata?: InterruptMetadata;
+}
+
+export interface InterruptMetadata {
+  reason: "input-required" | "error";
+  question?: string;
+  nodeData?: unknown;
+}
 
 export type EdgeTarget = string;
 
@@ -67,13 +98,18 @@ export type Edge = StaticEdge | ConditionalEdge;
 
 export interface RunResult {
   runId: string;
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "interrupted";
   state: State;
 }
 
 export interface RunOptions {
   initialState?: State;
   executor: Executor;
+  onEvent?: (event: WorkflowEvent) => void;
+}
+
+export interface ResumeOptions {
+  input?: string;
   onEvent?: (event: WorkflowEvent) => void;
 }
 
@@ -85,9 +121,11 @@ export interface Run {
   executor: Executor;
   currentNode: string;
   state: State;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   startTime: string;
   endTime?: string;
   initialState: State;
   finalState?: State;
+  interruptMetadata?: InterruptMetadata;
+  resumeInput?: string;
 }

@@ -36,7 +36,7 @@ export function createRenderer(): (event: WorkflowEvent) => void {
   return (event: WorkflowEvent) => {
     switch (event.type) {
       case "node:start": {
-        console.log(`\n▶ ${event.nodeId}`);
+        console.log(`\n▶ ${chalk.bold(event.nodeId)}`);
         startSpinner(event.nodeId);
         spinnerInterval = setInterval(updateSpinner, 100);
         break;
@@ -80,6 +80,18 @@ export function createRenderer(): (event: WorkflowEvent) => void {
         break;
       }
 
+      case "node:interrupted": {
+        if (spinnerInterval) {
+          clearInterval(spinnerInterval);
+          spinnerInterval = null;
+        }
+        if (spinner) {
+          spinner.warn(chalk.yellow(`interrupted`));
+          spinner = null;
+        }
+        break;
+      }
+
       case "run:complete": {
         console.log();
         if (event.status === "completed") {
@@ -87,6 +99,15 @@ export function createRenderer(): (event: WorkflowEvent) => void {
         } else {
           console.log(chalk.red(`✖ Run ${event.runId} failed`));
         }
+        break;
+      }
+
+      case "run:interrupted": {
+        console.log();
+        console.log(chalk.yellow(`⏸ Run ${event.runId} interrupted`));
+        console.log(
+          chalk.dim(`  Resume with: claudeflow resume ${event.runId}`),
+        );
         break;
       }
     }

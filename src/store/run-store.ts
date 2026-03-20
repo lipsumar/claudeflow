@@ -50,12 +50,17 @@ export class RunStore {
       currentState: { ...run.state },
       executor: run.executor.serialize(),
       workflowFile: run.workflow.filepath,
+      interruptMetadata: run.interruptMetadata,
+      // resumeInput is NOT persisted
     };
     if (run.endTime) stored.endTime = run.endTime;
     if (run.finalState) stored.finalState = run.finalState;
     const dir = join(this.basePath, run.runId);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "run.json"), JSON.stringify(stored, null, 2) + "\n");
+    writeFileSync(
+      join(dir, "run.json"),
+      JSON.stringify(stored, null, 2) + "\n",
+    );
   }
 
   appendEvent(runId: string, event: WorkflowEvent): void {

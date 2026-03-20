@@ -1,11 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Workflow } from "./workflow.js";
-import { runWorkflow } from "./engine.js";
+import { runWorkflow, resumeWorkflow } from "./engine.js";
 import { scriptedNode } from "../nodes/scripted.js";
 import { claudeNode } from "../nodes/claude.js";
+import { interruptNode } from "../nodes/interrupt.js";
 import { initConfig, resetConfig } from "../config.js";
 import { HostExecutor } from "../executor/host.js";
 import type { WorkflowEvent, WorkflowFromFile } from "./types.js";
+import type { StoredRun } from "../store/types.js";
+
+let mockWorkflow: WorkflowFromFile;
+vi.mock("./loader.js", () => ({
+  loadWorkflow: () => Promise.resolve(mockWorkflow),
+}));
 
 const store = {
   persistRun: vi.fn().mockImplementation((run) => {
@@ -402,6 +409,176 @@ describe("runWorkflow (store integration)", () => {
 
     // onEvent should receive the same events as appendEvent
     expect(events.length).toBe(store.appendEvent.mock.calls.length);
+  });
+});
+
+describe("runWorkflow (interrupt)", () => {
+  it("returns interrupted status when interrupt node has no input", async () => {
+    const wf = withFilepath(
+      new Workflow({ name: "test" })
+        .addNode(
+          "step1",
+          scriptedNode(async () => ({ value: 1 })),
+        )
+        .addNode(
+          "ask",
+          interruptNode({ question: "What is your name?", storeAs: "name" }),
+        )
+        .addNode(
+          "step2",
+          scriptedNode(async () => ({ done: true })),
+        )
+        .addEdge("step1", "ask")
+        .addEdge("ask", "step2"),
+    );
+
+    const events: WorkflowEvent[] = [];
+    const result = await runWorkflow(wf, {
+      executor: createExecutor(),
+      initialState: {},
+      onEvent: (e) => events.push(e),
+    });
+
+    // returned value
+    expect(result.status).toBe("interrupted");
+    expect(result.state.value).toBe(1);
+    expect(result.state.name).toBeUndefined();
+    expect(result.state.done).toBeUndefined();
+
+    // events emitted
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "node:interrupted", nodeId: "ask" }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "run:interrupted",
+        runId: result.runId,
+        status: "interrupted",
+      }),
+    );
+    // no node:end for the interrupted node
+    expect(events.filter((e) => e.type === "node:end" && e.nodeId === "ask")).toHaveLength(0);
+    // no run:complete
+    expect(events.filter((e) => e.type === "run:complete")).toHaveLength(0);
+
+    // run persisted as expected
+    const snapshots = store._snapshots;
+    const last = snapshots[snapshots.length - 1] as Record<string, unknown>;
+    expect(last.status).toBe("interrupted");
+    expect(last.endTime).toBeDefined();
+    expect(last.interruptMetadata).toEqual({
+      reason: "input-required",
+      question: "What is your name?",
+    });
+  });
+});
+
+describe("resumeWorkflow", () => {
+  it("resumes an interrupted run with input and completes", async () => {
+    // 1. Run workflow until it interrupts
+    const wf = withFilepath(
+      new Workflow({ name: "resume-test" })
+        .addNode(
+          "step1",
+          scriptedNode(async () => ({ value: 1 })),
+        )
+        .addNode(
+          "ask",
+          interruptNode({ question: "What is your name?", storeAs: "name" }),
+        )
+        .addNode(
+          "step2",
+          scriptedNode(async (ctx) => ({
+            greeting: `hello ${ctx.state.name}`,
+          })),
+        )
+        .addEdge("step1", "ask")
+        .addEdge("ask", "step2"),
+    );
+
+    const interruptResult = await runWorkflow(wf, {
+      executor: createExecutor(),
+      initialState: {},
+    });
+    expect(interruptResult.status).toBe("interrupted");
+
+    // 2. Build a StoredRun from the persisted snapshot
+    const lastSnapshot = store._snapshots[
+      store._snapshots.length - 1
+    ] as Record<string, unknown>;
+    const storedRun: StoredRun = {
+      runId: lastSnapshot.runId as string,
+      workflowName: "resume-test",
+      status: "interrupted",
+      startTime: lastSnapshot.startTime as string,
+      endTime: lastSnapshot.endTime as string,
+      initialState: lastSnapshot.initialState as Record<string, unknown>,
+      currentNode: lastSnapshot.currentNode as string,
+      currentState: lastSnapshot.currentState as Record<string, unknown>,
+      executor: { type: "host", workspace: "/tmp/claudeflow-test-resume" },
+      workflowFile: "/test/workflow.ts",
+    };
+
+    // Point the loader mock at the same workflow
+    mockWorkflow = wf;
+    store.persistRun.mockClear();
+    store._snapshots = [];
+    store.appendEvent.mockReset();
+
+    // 3. Resume with input
+    const events: WorkflowEvent[] = [];
+    const result = await resumeWorkflow(storedRun, {
+      input: "Alice",
+      onEvent: (e) => events.push(e),
+    });
+
+    // Workflow completed
+    expect(result.status).toBe("completed");
+    expect(result.runId).toBe(storedRun.runId);
+
+    // Interrupt node stored the input, step2 used it
+    expect(result.state.name).toBe("Alice");
+    expect(result.state.greeting).toBe("hello Alice");
+
+    // State from before the interrupt is preserved
+    expect(result.state.value).toBe(1);
+
+    // Events include run:complete
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "run:complete", status: "completed" }),
+    );
+  });
+
+  it("throws when storedRun has no workflowFile", async () => {
+    const storedRun: StoredRun = {
+      runId: "r1",
+      workflowName: "test",
+      status: "interrupted",
+      startTime: new Date().toISOString(),
+      initialState: {},
+      currentState: {},
+      executor: { type: "host", workspace: "/tmp/test" },
+    };
+
+    await expect(resumeWorkflow(storedRun, {})).rejects.toThrow(
+      "Can not resume run without workflowFile",
+    );
+  });
+
+  it("throws when storedRun has no executor", async () => {
+    const storedRun: StoredRun = {
+      runId: "r1",
+      workflowName: "test",
+      status: "interrupted",
+      startTime: new Date().toISOString(),
+      initialState: {},
+      currentState: {},
+      workflowFile: "/test/workflow.ts",
+    };
+
+    await expect(resumeWorkflow(storedRun, {})).rejects.toThrow(
+      "Can not resume run without executor",
+    );
   });
 });
 
