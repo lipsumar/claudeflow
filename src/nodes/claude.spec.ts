@@ -14,7 +14,11 @@ vi.mock("../config.js", () => ({
   }),
 }));
 
-import { executeClaudeNode } from "./claude.js";
+import {
+  executeClaudeNode,
+  containsToolUse,
+  extractAskUserQuestion,
+} from "./claude.js";
 
 function createCtx(state: Record<string, unknown> = {}): RunContext {
   return {
@@ -82,7 +86,14 @@ describe("executeClaudeNode", () => {
 
   it("spawns claude with correct arguments", async () => {
     const def = createDef({ prompt: "hello world", model: "opus" });
-    const promise = executeClaudeNode(def, "node-1", createCtx(), executor, emit);
+    const promise = executeClaudeNode(
+      def,
+      "node-1",
+      createCtx(),
+      executor,
+      emit,
+      {},
+    );
 
     child.emit("close", 0);
     await promise;
@@ -112,6 +123,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     child.emit("close", 0);
@@ -127,6 +139,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     child.emit("close", 1);
@@ -141,6 +154,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     const msg = { type: "assistant", message: "hi" };
@@ -162,6 +176,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     child.stderr!.emit("data", Buffer.from("something went wrong"));
@@ -182,6 +197,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     const msg = { type: "result", text: "done" };
@@ -207,6 +223,7 @@ describe("executeClaudeNode", () => {
       createCtx({ value: "42" }),
       executor,
       emit,
+      {},
     );
 
     child.emit("close", 0);
@@ -227,6 +244,7 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     child.emit("close", 0);
@@ -248,10 +266,189 @@ describe("executeClaudeNode", () => {
       createCtx(),
       executor,
       emit,
+      {},
     );
 
     child.emit("error", new Error("spawn failed"));
 
     await expect(promise).rejects.toThrow("spawn failed");
+  });
+});
+
+function assistantMessage(
+  content: Record<string, unknown>[],
+  sessionId = "sess-1",
+) {
+  return {
+    type: "assistant",
+    message: { content },
+    session_id: sessionId,
+  } as unknown as Parameters<typeof containsToolUse>[0];
+}
+
+describe("containsToolUse", () => {
+  it("returns true when tool_use block matches", () => {
+    const msg = assistantMessage([
+      { type: "text", text: "hello" },
+      { type: "tool_use", name: "AskUserQuestion", input: {} },
+    ]);
+    expect(containsToolUse(msg, "AskUserQuestion")).toBe(true);
+  });
+
+  it("returns false when tool name does not match", () => {
+    const msg = assistantMessage([
+      { type: "tool_use", name: "Read", input: {} },
+    ]);
+    expect(containsToolUse(msg, "AskUserQuestion")).toBe(false);
+  });
+
+  it("returns false for non-assistant messages", () => {
+    const msg = { type: "system", subtype: "init" } as unknown as Parameters<
+      typeof containsToolUse
+    >[0];
+    expect(containsToolUse(msg, "AskUserQuestion")).toBe(false);
+  });
+
+  it("returns false when content is empty", () => {
+    const msg = assistantMessage([]);
+    expect(containsToolUse(msg, "AskUserQuestion")).toBe(false);
+  });
+});
+
+describe("extractAskUserQuestion", () => {
+  it("returns null for non-assistant messages", () => {
+    const msg = { type: "user" } as unknown as Parameters<
+      typeof extractAskUserQuestion
+    >[0];
+    expect(extractAskUserQuestion(msg)).toBeNull();
+  });
+
+  it("returns null when no AskUserQuestion block exists", () => {
+    const msg = assistantMessage([{ type: "text", text: "hello" }]);
+    expect(extractAskUserQuestion(msg)).toBeNull();
+  });
+
+  it("extracts a simple question string", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: { question: "What should I do?" },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe("What should I do?");
+  });
+
+  it("extracts question with header", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: { question: "What should I do?", header: "Next Task" },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe("## Next Task\nWhat should I do?");
+  });
+
+  it("extracts question with options", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: {
+          question: "Pick one",
+          options: [
+            { label: "Option A", description: "First option" },
+            { label: "Option B" },
+          ],
+        },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe(
+      "Pick one\n- Option A: First option\n- Option B",
+    );
+  });
+
+  it("extracts from questions array (multi-question form)", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: {
+          questions: [
+            { question: "First question", header: "Q1" },
+            { question: "Second question" },
+          ],
+        },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe(
+      "## Q1\nFirst question\n\nSecond question",
+    );
+  });
+
+  it("extracts full AskUserQuestion matching fixture data", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        id: "toolu_01NbEXYUyyUEkoNQY1NpXZdg",
+        name: "AskUserQuestion",
+        input: {
+          questions: [
+            {
+              question: "What would you like me to work on next?",
+              header: "Next Task",
+              options: [
+                {
+                  label: "Explore the codebase",
+                  description:
+                    "Get familiar with the project structure and architecture",
+                },
+                {
+                  label: "Fix a bug",
+                  description: "Identify and fix an existing issue",
+                },
+                {
+                  label: "Add a feature",
+                  description: "Implement new functionality",
+                },
+                {
+                  label: "Other (custom task)",
+                  description: "Tell me what you'd like to do",
+                },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+        caller: { type: "direct" },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe(
+      [
+        "## Next Task",
+        "What would you like me to work on next?",
+        "- Explore the codebase: Get familiar with the project structure and architecture",
+        "- Fix a bug: Identify and fix an existing issue",
+        "- Add a feature: Implement new functionality",
+        "- Other (custom task): Tell me what you'd like to do",
+      ].join("\n"),
+    );
+  });
+
+  it("concatenates multiple AskUserQuestion blocks", () => {
+    const msg = assistantMessage([
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: { question: "Question one" },
+      },
+      {
+        type: "tool_use",
+        name: "AskUserQuestion",
+        input: { question: "Question two" },
+      },
+    ]);
+    expect(extractAskUserQuestion(msg)).toBe("Question one\n\nQuestion two");
   });
 });

@@ -514,7 +514,8 @@ describe("resumeWorkflow", () => {
       endTime: lastSnapshot.endTime as string,
       initialState: lastSnapshot.initialState as Record<string, unknown>,
       currentNode: lastSnapshot.currentNode as string,
-      currentState: lastSnapshot.currentState as Record<string, unknown>,
+      currentState: lastSnapshot.state as Record<string, unknown>,
+      interruptMetadata: lastSnapshot.interruptMetadata as StoredRun["interruptMetadata"],
       executor: { type: "host", workspace: "/tmp/claudeflow-test-resume" },
       workflowFile: "/test/workflow.ts",
     };

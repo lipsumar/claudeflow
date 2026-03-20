@@ -55,6 +55,9 @@ export async function resumeWorkflow(
   if (!storedRun.executor) {
     throw new Error("Can not resume run without executor");
   }
+  if (!storedRun.currentNode) {
+    throw new Error("Can not resume run without currentNode");
+  }
   const workflow = await loadWorkflow(storedRun.workflowFile);
   // we need to know which type of executor to properly hydrate
   const executor = HostExecutor.hydrate(storedRun.executor);
@@ -62,12 +65,13 @@ export async function resumeWorkflow(
     runId: storedRun.runId,
     workflow,
     executor,
-    currentNode: workflow.getEntryNode(),
+    currentNode: storedRun.currentNode,
     state: { ...storedRun.currentState },
     status: storedRun.status,
     startTime: storedRun.startTime,
     initialState: { ...storedRun.initialState },
     resumeInput: options.input,
+    interruptMetadata: storedRun.interruptMetadata,
   };
 
   return executeLoop(run, options.onEvent);
@@ -112,12 +116,17 @@ async function executeLoop(
       } else if (nodeDef.type === "interrupt") {
         nodeResult = executeInterruptNode(run.resumeInput || "", ctx, nodeDef);
       } else {
+        const resume = {
+          input: run.resumeInput,
+          nodeData: run.interruptMetadata?.nodeData,
+        };
         nodeResult = await executeClaudeNode(
           nodeDef,
           run.currentNode,
           ctx,
           executor,
           emit,
+          resume,
         );
       }
 
