@@ -1,6 +1,10 @@
 import { Workflow, scriptedNode } from "@lipsumar/claudeflow";
 
-export default new Workflow({ name: "text-pipeline", executor: "host" })
+export default new Workflow({
+  name: "text-pipeline",
+  executor: "docker",
+  dockerImage: "claudeflow-sandbox",
+})
   .addNode(
     "read_input",
     scriptedNode(async (ctx) => {
