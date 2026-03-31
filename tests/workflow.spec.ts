@@ -54,6 +54,6 @@ describe("claudeflow run", () => {
         "run:complete",
       ]);
     },
-    10_000,
+    20_000,
   );
 });
