@@ -1,6 +1,6 @@
 import { Workflow, scriptedNode } from "../../../src/index.js";
 
-export default new Workflow({ name: "text-pipeline" })
+export default new Workflow({ name: "text-pipeline", executor: "host" })
   .addNode(
     "read_input",
     scriptedNode(async (ctx) => {

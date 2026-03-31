@@ -35,7 +35,6 @@ function createCtx(state: Record<string, unknown> = {}): RunContext {
 function createDef(overrides: Partial<ClaudeNodeDef> = {}): ClaudeNodeDef {
   return {
     type: "claude",
-    image: "test-image",
     prompt: "do something",
     allowedDomains: [],
     env: {},

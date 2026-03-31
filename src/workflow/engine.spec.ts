@@ -40,7 +40,9 @@ beforeEach(async () => {
 });
 
 function withFilepath(wf: Workflow): WorkflowFromFile {
-  return Object.assign(wf, { filepath: "/test/workflow.ts" }) as WorkflowFromFile;
+  return Object.assign(wf, {
+    filepath: "/test/workflow.ts",
+  }) as WorkflowFromFile;
 }
 
 function createExecutor() {
@@ -50,7 +52,7 @@ function createExecutor() {
 describe("runWorkflow", () => {
   it("runs a single scripted node", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "greet",
         scriptedNode(async () => ({ greeting: "hello" })),
       ),
@@ -67,7 +69,7 @@ describe("runWorkflow", () => {
 
   it("chains scripted nodes with edges", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "step1",
           scriptedNode(async () => ({ value: 1 })),
@@ -92,7 +94,7 @@ describe("runWorkflow", () => {
 
   it("follows conditional edges", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "check",
           scriptedNode(async () => ({ shouldFix: true })),
@@ -122,7 +124,7 @@ describe("runWorkflow", () => {
 
   it("conditional edge can end the workflow", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "check",
           scriptedNode(async () => ({ done: true })),
@@ -148,7 +150,7 @@ describe("runWorkflow", () => {
     const events: WorkflowEvent[] = [];
 
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "step1",
         scriptedNode(async (ctx) => {
           ctx.log.info("working...");
@@ -182,7 +184,7 @@ describe("runWorkflow", () => {
     const events: WorkflowEvent[] = [];
 
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "fail",
           scriptedNode(async () => {
@@ -215,7 +217,7 @@ describe("runWorkflow", () => {
 
   it("shallow-merges state across nodes", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "a",
           scriptedNode(async () => ({ x: 1, y: 2 })),
@@ -237,7 +239,7 @@ describe("runWorkflow", () => {
 
   it("provides ctx.exec bound to workspace", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "bash",
         scriptedNode(async (ctx) => {
           await ctx.exec("sh", ["-c", "echo hello > greeting.txt"]);
@@ -260,7 +262,7 @@ describe("runWorkflow", () => {
     const events: WorkflowEvent[] = [];
 
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "bash",
         scriptedNode(async (ctx) => {
           await ctx.exec("echo", ["hello"]);
@@ -297,7 +299,7 @@ describe("runWorkflow", () => {
   });
 
   it("throws when running an empty workflow", async () => {
-    const wf = withFilepath(new Workflow({ name: "test" }));
+    const wf = withFilepath(new Workflow({ name: "test", executor: "host" }));
     await expect(
       runWorkflow(wf, { executor: createExecutor() }),
     ).rejects.toThrow("Workflow has no nodes");
@@ -305,7 +307,7 @@ describe("runWorkflow", () => {
 
   it("claude node throws not-implemented error", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "claude",
         claudeNode({
           image: "test:latest",
@@ -325,7 +327,7 @@ describe("runWorkflow", () => {
 describe("runWorkflow (store integration)", () => {
   it("calls persistRun at start and end", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "my-wf" }).addNode(
+      new Workflow({ name: "my-wf", executor: "host" }).addNode(
         "step",
         scriptedNode(async () => ({ done: true })),
       ),
@@ -354,7 +356,7 @@ describe("runWorkflow (store integration)", () => {
 
   it("calls appendEvent for every emitted event", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "step",
         scriptedNode(async () => ({ done: true })),
       ),
@@ -375,7 +377,7 @@ describe("runWorkflow (store integration)", () => {
 
   it("records failed status on error", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "fail",
         scriptedNode(async () => {
           throw new Error("boom");
@@ -388,14 +390,17 @@ describe("runWorkflow (store integration)", () => {
       initialState: {},
     });
 
-    const last = store._snapshots[store._snapshots.length - 1] as Record<string, unknown>;
+    const last = store._snapshots[store._snapshots.length - 1] as Record<
+      string,
+      unknown
+    >;
     expect(last.status).toBe("failed");
   });
 
   it("still calls onEvent alongside store.appendEvent", async () => {
     const events: WorkflowEvent[] = [];
     const wf = withFilepath(
-      new Workflow({ name: "test" }).addNode(
+      new Workflow({ name: "test", executor: "host" }).addNode(
         "step",
         scriptedNode(async () => ({ done: true })),
       ),
@@ -415,7 +420,7 @@ describe("runWorkflow (store integration)", () => {
 describe("runWorkflow (interrupt)", () => {
   it("returns interrupted status when interrupt node has no input", async () => {
     const wf = withFilepath(
-      new Workflow({ name: "test" })
+      new Workflow({ name: "test", executor: "host" })
         .addNode(
           "step1",
           scriptedNode(async () => ({ value: 1 })),
@@ -457,7 +462,9 @@ describe("runWorkflow (interrupt)", () => {
       }),
     );
     // no node:end for the interrupted node
-    expect(events.filter((e) => e.type === "node:end" && e.nodeId === "ask")).toHaveLength(0);
+    expect(
+      events.filter((e) => e.type === "node:end" && e.nodeId === "ask"),
+    ).toHaveLength(0);
     // no run:complete
     expect(events.filter((e) => e.type === "run:complete")).toHaveLength(0);
 
@@ -477,7 +484,7 @@ describe("resumeWorkflow", () => {
   it("resumes an interrupted run with input and completes", async () => {
     // 1. Run workflow until it interrupts
     const wf = withFilepath(
-      new Workflow({ name: "resume-test" })
+      new Workflow({ name: "resume-test", executor: "host" })
         .addNode(
           "step1",
           scriptedNode(async () => ({ value: 1 })),
@@ -515,7 +522,8 @@ describe("resumeWorkflow", () => {
       initialState: lastSnapshot.initialState as Record<string, unknown>,
       currentNode: lastSnapshot.currentNode as string,
       currentState: lastSnapshot.state as Record<string, unknown>,
-      interruptMetadata: lastSnapshot.interruptMetadata as StoredRun["interruptMetadata"],
+      interruptMetadata:
+        lastSnapshot.interruptMetadata as StoredRun["interruptMetadata"],
       executor: { type: "host", workspace: "/tmp/claudeflow-test-resume" },
       workflowFile: "/test/workflow.ts",
     };
@@ -585,7 +593,7 @@ describe("resumeWorkflow", () => {
 
 describe("Workflow (definition)", () => {
   it("throws on duplicate node id", () => {
-    const wf = new Workflow({ name: "test" }).addNode(
+    const wf = new Workflow({ name: "test", executor: "host" }).addNode(
       "a",
       scriptedNode(async () => ({})),
     );
@@ -598,7 +606,7 @@ describe("Workflow (definition)", () => {
   });
 
   it("throws on edge to nonexistent node", () => {
-    const wf = new Workflow({ name: "test" }).addNode(
+    const wf = new Workflow({ name: "test", executor: "host" }).addNode(
       "a",
       scriptedNode(async () => ({})),
     );
@@ -606,7 +614,7 @@ describe("Workflow (definition)", () => {
   });
 
   it("throws on duplicate outgoing edge", () => {
-    const wf = new Workflow({ name: "test" })
+    const wf = new Workflow({ name: "test", executor: "host" })
       .addNode(
         "a",
         scriptedNode(async () => ({})),

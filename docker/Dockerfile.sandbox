@@ -1,13 +1,19 @@
-FROM node:20-slim
+FROM node:25.8-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl python3 pip \
     && rm -rf /var/lib/apt/lists/*
 
+RUN npm install -g --force corepack && corepack enable
 RUN npm install -g @anthropic-ai/claude-code
 
 RUN useradd -m -s /bin/bash agent
 RUN mkdir -p /workspace && chown agent:agent /workspace
 
 USER agent
+
+# Pre-accept Claude Code terms so --print doesn't block on first run
+RUN mkdir -p /home/agent/.claude && \
+    echo '{"hasCompletedOnboarding":true}' > /home/agent/.claude/settings.json
+
 WORKDIR /workspace

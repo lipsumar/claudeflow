@@ -27,6 +27,12 @@ export type NodeChunk =
   | { level: "debug" | "info" | "warn" | "error"; message: string }
   | { type: "claude"; message: SDKMessage };
 
+export interface WorkflowOptions {
+  name: string;
+  executor: "host" | "docker";
+  dockerImage?: string; // required if executor is "docker" - type could be nicer
+}
+
 export type WorkflowEvent =
   | { type: "node:start"; nodeId: string; runId: string }
   | { type: "node:chunk"; nodeId: string; chunk: NodeChunk }
@@ -51,7 +57,6 @@ export interface ScriptedNodeDef {
 
 export interface ClaudeNodeDef {
   type: "claude";
-  image: string;
   prompt: string | ((ctx: RunContext) => string);
   allowedDomains: string[];
   env: Record<string, string>;

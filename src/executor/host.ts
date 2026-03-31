@@ -23,6 +23,14 @@ export class HostExecutor implements Executor {
     mkdirSync(this.workspace, { recursive: true });
   }
 
+  private buildEnv(env?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+    return {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      ...env,
+    } as NodeJS.ProcessEnv;
+  }
+
   exec(cmd: string, args: string[], opts?: ExecOpts): Promise<ExecResult> {
     return new Promise((resolve, reject) => {
       execFile(
@@ -30,9 +38,7 @@ export class HostExecutor implements Executor {
         args,
         {
           cwd: opts?.cwd ?? this.workspace,
-          env: opts?.env
-            ? (opts.env as NodeJS.ProcessEnv)
-            : (process.env as NodeJS.ProcessEnv),
+          env: this.buildEnv(opts?.env),
         },
         (error, stdout, stderr) => {
           if (error && error.code === undefined) {
@@ -52,9 +58,7 @@ export class HostExecutor implements Executor {
   spawn(cmd: string, args: string[], opts?: SpawnOpts): ChildProcess {
     return cpSpawn(cmd, args, {
       cwd: opts?.cwd ?? this.workspace,
-      env: opts?.env
-        ? (opts.env as NodeJS.ProcessEnv)
-        : (process.env as NodeJS.ProcessEnv),
+      env: this.buildEnv(opts?.env),
       stdio: opts?.stdio as Parameters<typeof cpSpawn>[2] extends { stdio?: infer S } ? S : never,
     });
   }

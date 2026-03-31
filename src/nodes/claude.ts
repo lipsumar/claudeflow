@@ -21,7 +21,6 @@ export interface ClaudeNodeOptions {
 export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
   return {
     type: "claude",
-    image: options.image,
     prompt: options.prompt,
     allowedDomains: options.allowedDomains ?? [],
     env: options.env ?? {},
@@ -63,8 +62,6 @@ export async function executeClaudeNode(
 
   const config = getConfig();
   const env: Record<string, string | undefined> = {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
     ANTHROPIC_API_KEY: config.anthropic.apiKey,
     ...def.env,
   };

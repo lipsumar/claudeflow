@@ -7,6 +7,8 @@ import { runWorkflow } from "../../workflow/engine.js";
 import { createRenderer } from "../renderer.js";
 import { HostExecutor } from "../../executor/host.js";
 import type { WorkflowEvent } from "../../workflow/types.js";
+import type { Executor } from "../../executor/types.js";
+import { DockerExecutor } from "../../executor/docker.js";
 
 export default defineCommand({
   meta: {
@@ -30,9 +32,21 @@ export default defineCommand({
   },
   async run({ args }) {
     const workflow = await loadWorkflow(args.file);
-    const executor = new HostExecutor({
-      workspace: args.workspace ?? join(tmpdir(), `claudeflow-${randomUUID()}`),
-    });
+
+    let executor: Executor;
+    const workspace =
+      args.workspace ?? join(tmpdir(), `claudeflow-${randomUUID()}`);
+
+    if (workflow.executor === "host") {
+      executor = new HostExecutor({ workspace });
+    } else if (workflow.executor === "docker") {
+      if (!workflow.dockerImage) {
+        throw new Error("Docker image is required for docker executor");
+      }
+      executor = new DockerExecutor({ workspace, image: workflow.dockerImage });
+    } else {
+      throw new Error(`Unsupported executor: ${workflow.executor}`);
+    }
 
     const onEvent: (event: WorkflowEvent) => void =
       args.output === "json"

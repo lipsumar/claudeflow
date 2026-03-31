@@ -1,17 +1,18 @@
-import type { Edge, NodeDef, RunContext } from "./types.js";
-
-export interface WorkflowOptions {
-  name: string;
-}
+import type { Edge, NodeDef, RunContext, WorkflowOptions } from "./types.js";
 
 export class Workflow {
   readonly name: string;
+  readonly executor: string;
+  readonly dockerImage: string | undefined;
+
   private nodes = new Map<string, NodeDef>();
   private edges = new Map<string, Edge>();
   private nodeOrder: string[] = [];
 
   constructor(options: WorkflowOptions) {
     this.name = options.name;
+    this.executor = options.executor;
+    this.dockerImage = options.dockerImage;
   }
 
   addNode(id: string, def: NodeDef): this {
@@ -33,10 +34,7 @@ export class Workflow {
     return this;
   }
 
-  addConditionalEdge(
-    from: string,
-    fn: (ctx: RunContext) => string,
-  ): this {
+  addConditionalEdge(from: string, fn: (ctx: RunContext) => string): this {
     this.assertNodeExists(from);
     if (this.edges.has(from)) {
       throw new Error(`Node "${from}" already has an outgoing edge`);
