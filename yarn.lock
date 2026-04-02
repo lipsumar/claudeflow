@@ -412,6 +412,7 @@ __metadata:
     tsdown: "npm:^0.21.2"
     typescript: "npm:^5.9.3"
     vitest: "npm:^4.1.0"
+    zod: "npm:^4.3.6"
   bin:
     claudeflow: ./dist/cli/index.mjs
   languageName: unknown
@@ -2712,5 +2713,12 @@ __metadata:
   version: 2.1.2
   resolution: "yoctocolors@npm:2.1.2"
   checksum: 10c0/b220f30f53ebc2167330c3adc86a3c7f158bcba0236f6c67e25644c3188e2571a6014ffc1321943bb619460259d3d27eb4c9cc58c2d884c1b195805883ec7066
+  languageName: node
+  linkType: hard
+
+"zod@npm:^4.3.6":
+  version: 4.3.6
+  resolution: "zod@npm:4.3.6"
+  checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
   languageName: node
   linkType: hard

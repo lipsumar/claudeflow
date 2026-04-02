@@ -3,7 +3,7 @@ import { resumeWorkflow } from "../../workflow/engine.js";
 import { createRenderer } from "../renderer.js";
 import type { WorkflowEvent } from "../../workflow/types.js";
 import { getStore } from "../../store/run-store.js";
-import { createInterface } from "node:readline";
+import { promptUser } from "../utils.js";
 
 export default defineCommand({
   meta: {
@@ -67,17 +67,3 @@ export default defineCommand({
     }
   },
 });
-
-function promptUser(prompt: string): Promise<string> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(prompt, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}

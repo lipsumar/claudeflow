@@ -26,3 +26,6 @@ export { interruptNode } from "./nodes/interrupt.js";
 
 export { RunStore, getStore } from "./store/run-store.js";
 export type { StoredRun, RunListOptions } from "./store/types.js";
+
+// re-export zod for convenience
+export { z } from "zod";

@@ -9,6 +9,7 @@ import { HostExecutor } from "../../executor/host.js";
 import type { WorkflowEvent } from "../../workflow/types.js";
 import type { Executor } from "../../executor/types.js";
 import { DockerExecutor } from "../../executor/docker.js";
+import { parseRawInputs, promptUser } from "../utils.js";
 
 export default defineCommand({
   meta: {
@@ -53,9 +54,12 @@ export default defineCommand({
         ? (event) => console.log(JSON.stringify(event))
         : createRenderer();
 
+    const initialState = await resolveInputs(workflow);
+
     const result = await runWorkflow(workflow, {
       executor,
       onEvent,
+      initialState,
     });
 
     if (result.status === "failed") {
@@ -63,3 +67,33 @@ export default defineCommand({
     }
   },
 });
+
+async function resolveInputs(
+  workflow: Awaited<ReturnType<typeof loadWorkflow>>,
+): Promise<Record<string, unknown>> {
+  if (!workflow.inputs) return {};
+
+  const rawInputs = parseRawInputs();
+  const shape = workflow.inputs.shape;
+  const coerced: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(shape)) {
+    const s = schema as {
+      type: string;
+      def?: { innerType?: { type: string } };
+    };
+    const type = s.type === "optional" ? s.def!.innerType!.type : s.type;
+    const raw = rawInputs[key] ?? (await promptUser(`${key} (${type}): `));
+    if (type === "number") {
+      const n = Number(raw);
+      if (Number.isNaN(n))
+        throw new Error(`Input "${key}" must be a number, got "${raw}"`);
+      coerced[key] = n;
+    } else if (type === "boolean") {
+      coerced[key] = raw === "true" || raw === "1";
+    } else {
+      coerced[key] = raw;
+    }
+  }
+
+  return workflow.inputs.parse(coerced);
+}

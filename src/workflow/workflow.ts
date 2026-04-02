@@ -1,9 +1,11 @@
+import type { ZodObject } from "zod";
 import type { Edge, NodeDef, RunContext, WorkflowOptions } from "./types.js";
 
 export class Workflow {
   readonly name: string;
   readonly executor: string;
   readonly dockerImage: string | undefined;
+  readonly inputs: ZodObject | null;
 
   private nodes = new Map<string, NodeDef>();
   private edges = new Map<string, Edge>();
@@ -13,6 +15,7 @@ export class Workflow {
     this.name = options.name;
     this.executor = options.executor;
     this.dockerImage = options.dockerImage;
+    this.inputs = options.inputs ?? null;
   }
 
   addNode(id: string, def: NodeDef): this {

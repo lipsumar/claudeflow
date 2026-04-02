@@ -1,3 +1,5 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { ZodObject } from "zod";
 import type { Executor, ExecResult } from "../executor/types.js";
 import type { Workflow } from "./workflow.js";
 
@@ -20,8 +22,6 @@ export interface RunContext {
   exec(cmd: string, args: string[]): Promise<ExecResult>;
 }
 
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-
 export type NodeChunk =
   | string
   | { level: "debug" | "info" | "warn" | "error"; message: string }
@@ -31,6 +31,7 @@ export interface WorkflowOptions {
   name: string;
   executor: "host" | "docker";
   dockerImage?: string; // required if executor is "docker" - type could be nicer
+  inputs?: ZodObject;
 }
 
 export type WorkflowEvent =
