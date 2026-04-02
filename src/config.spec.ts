@@ -7,6 +7,7 @@ import {
   defineConfig,
   resolveConfig,
   loadConfigFile,
+  resolvePaths,
   initConfig,
   getConfig,
   resetConfig,
@@ -32,6 +33,18 @@ describe("resolveConfig", () => {
   });
 });
 
+describe("resolvePaths", () => {
+  it("does not add undefined keys for unset paths", () => {
+    const result = resolvePaths({ squid: { port: 7777 } }, "/some/dir");
+    expect(result).toEqual({ squid: { port: 7777 } });
+  });
+
+  it("resolves a relative store.path against the given dir", () => {
+    const result = resolvePaths({ store: { path: "./my-runs" } }, "/some/dir");
+    expect(result.store?.path).toBe("/some/dir/my-runs");
+  });
+});
+
 describe("loadConfigFile", () => {
   it("returns empty object when no config file exists", async () => {
     const dir = mkdtempSync(join(tmpdir(), "cf-test-"));
@@ -46,6 +59,16 @@ describe("loadConfigFile", () => {
     );
     const cfg = await loadConfigFile(dir);
     expect(cfg).toEqual({ squid: { port: 7777 } });
+  });
+
+  it("resolves relative store.path against the config file directory", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cf-test-"));
+    writeFileSync(
+      join(dir, "claudeflow.config.ts"),
+      `export default { store: { path: "./my-runs" } };`,
+    );
+    const cfg = await loadConfigFile(dir);
+    expect(cfg.store?.path).toBe(join(dir, "my-runs"));
   });
 
   it("loads a .js config file", async () => {

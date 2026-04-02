@@ -1,8 +1,11 @@
 import { createJiti } from "jiti";
-import { dirname, resolve, parse as parsePath } from "node:path";
+import { dirname, resolve, parse as parsePath, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import _ from "lodash";
+
+// all fields containing paths must be
+// fully resolved in resolvePaths()
 
 export interface ClaudeflowConfig {
   root?: boolean;
@@ -91,16 +94,18 @@ export async function loadConfigFromDir(
     const jiti = createJiti(filepath);
     const mod = await jiti.import(filepath);
     const config = (mod as { default?: ClaudeflowConfig }).default ?? mod;
-    return config as ClaudeflowConfig;
+
+    return resolvePaths(config as ClaudeflowConfig, dirname(filepath));
   }
   return {};
 }
 
-function mergeConfigs(
-  a: ClaudeflowConfig,
-  b: ClaudeflowConfig,
-): ClaudeflowConfig {
-  return _.merge({}, a, b);
+export function resolvePaths(config: ClaudeflowConfig, dir: string) {
+  const resolved = _.merge({}, config);
+  if (resolved.store?.path) {
+    resolved.store.path = resolve(dir, resolved.store.path);
+  }
+  return resolved;
 }
 
 /**
@@ -141,7 +146,7 @@ export async function loadConfigFile(
   // Merge: home → farthest ancestor → … → startDir (closest wins)
   let merged: ClaudeflowConfig = homeConfig;
   for (let i = ancestors.length - 1; i >= 0; i--) {
-    merged = mergeConfigs(merged, ancestors[i]!.config);
+    merged = _.merge({}, merged, ancestors[i]!.config);
   }
 
   return merged;
@@ -156,7 +161,7 @@ export async function initConfig(
   fromDir?: string,
 ): Promise<ResolvedConfig> {
   const fileConfig = await loadConfigFile(fromDir);
-  currentConfig = resolveConfig(mergeConfigs(fileConfig, overrides ?? {}));
+  currentConfig = resolveConfig(_.merge({}, fileConfig, overrides ?? {}));
   return currentConfig;
 }
 
