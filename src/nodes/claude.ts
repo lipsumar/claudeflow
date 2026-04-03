@@ -112,6 +112,8 @@ export async function executeClaudeNode(
           structuredOutput = (message as any).structured_output;
         }
       }
+
+      //TODO handle non success result
     });
 
     proc.on("stderr", (data) => {
