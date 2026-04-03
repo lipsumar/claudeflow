@@ -15,6 +15,7 @@ export interface ClaudeflowConfig {
   squid?: {
     containerName?: string;
     port?: number;
+    allowedDomains?: string[];
   };
   sandbox?: {
     defaultImage?: string;
@@ -33,6 +34,7 @@ export interface ResolvedConfig {
   squid: {
     containerName: string;
     port: number;
+    allowedDomains: string[];
   };
   sandbox: {
     defaultImage: string;
@@ -51,6 +53,7 @@ export const defaultConfig: ResolvedConfig = {
   squid: {
     containerName: "claudeflow-squid",
     port: 3128,
+    allowedDomains: [],
   },
   sandbox: {
     defaultImage: "claudeflow-sandbox:latest",
@@ -69,12 +72,17 @@ export function defineConfig(config: ClaudeflowConfig): ClaudeflowConfig {
 export function resolveConfig(
   overrides: ClaudeflowConfig = {},
 ): ResolvedConfig {
-  return {
+  const config = {
     anthropic: { ...defaultConfig.anthropic, ...overrides.anthropic },
     squid: { ...defaultConfig.squid, ...overrides.squid },
     sandbox: { ...defaultConfig.sandbox, ...overrides.sandbox },
     store: { ...defaultConfig.store, ...overrides.store },
   };
+  // always force api.anthropic.com in domain allow list
+  if (!config.squid.allowedDomains.includes("api.anthropic.com")) {
+    config.squid.allowedDomains.unshift("api.anthropic.com");
+  }
+  return config;
 }
 
 const CONFIG_FILES = [

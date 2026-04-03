@@ -1,11 +1,7 @@
 services:
   squid:
-    build:
-      context: .
-      dockerfile: Dockerfile.squid
+    image: ubuntu/squid:latest
     container_name: claudeflow-squid
-    ports:
-      - "3128:3128"
     volumes:
       - squid-acl:/etc/squid/acl
     restart: unless-stopped

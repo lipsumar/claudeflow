@@ -27,8 +27,6 @@ export async function runWorkflow(
 ): Promise<RunResult> {
   const { executor } = options;
 
-  await executor.init();
-
   const state: State = { ...(options.initialState ?? {}) };
 
   const run: Run = {
@@ -41,6 +39,8 @@ export async function runWorkflow(
     startTime: new Date().toISOString(),
     initialState: { ...state }, // maybe remove ? what is it used for ?
   };
+
+  await executor.init(run.runId);
 
   return executeLoop(run, options.onEvent);
 }

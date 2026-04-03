@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
-import { defaultConfig } from "../src/config.js";
+import { defaultConfig, resolveConfig } from "../src/config.js";
 import { runCli } from "./helpers.js";
 
 const fixtures = resolve(__dirname, "fixtures");
@@ -10,7 +10,7 @@ describe("claudeflow config", () => {
     const { stdout } = await runCli(["config"], {
       cwd: "/tmp",
     });
-    expect(JSON.parse(stdout)).toEqual(defaultConfig);
+    expect(JSON.parse(stdout)).toEqual(resolveConfig());
   });
 
   it("merges user config file with defaults", async () => {

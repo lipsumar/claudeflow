@@ -9,7 +9,16 @@ import type {
   SerializedExecutor,
 } from "./types.js";
 import type { ChildProcess } from "node:child_process";
+import type { HttpRequestEntry } from "../workflow/types.js";
 import Docker from "dockerode";
+import { getConfig } from "../config.js";
+import {
+  createRunNetwork,
+  destroyRunNetwork,
+  connectSquidToNetwork,
+  disconnectSquidFromNetwork,
+} from "../sandbox/network.js";
+import { parseAccessLog } from "../sandbox/proxy.js";
 
 export class DockerExecutor implements Executor {
   workspace: string;
@@ -17,30 +26,54 @@ export class DockerExecutor implements Executor {
   image: string;
   container?: Docker.Container;
 
+  private runId?: string;
+  private networkName?: string;
+  private squidGatewayIp?: string;
+
   constructor({ workspace, image }: { workspace: string; image: string }) {
-    // workspace is a directory on the host
-    // that will be mounted into the Docker container
     this.workspace = workspace;
-
-    // we may want to get this injected at some point
-    // but for now we'll just create it here
     this.docker = new Docker();
-
     this.image = image;
   }
 
-  async init(): Promise<void> {
+  async init(runId: string): Promise<void> {
     mkdirSync(this.workspace, { recursive: true });
 
-    // start the Docker container with the workspace mounted
+    this.runId = runId;
+    const config = getConfig();
+    const squidName = config.squid.containerName;
+
+    // 1. Create internal network
+    this.networkName = await createRunNetwork(this.docker, runId);
+
+    // 2. Connect squid to the network, get its IP
+    this.squidGatewayIp = await connectSquidToNetwork(
+      this.docker,
+      this.networkName,
+      squidName,
+    );
+
+    const proxyUrl = `http://${this.squidGatewayIp}:${config.squid.port}`;
+
+    // 3. Create container on the internal network
     this.container = await this.docker.createContainer({
+      name: this.getContainerName(),
       Image: this.image,
       Cmd: ["sleep", "infinity"],
       HostConfig: {
         Binds: [`${this.workspace}:/workspace`],
+        NetworkMode: this.networkName,
       },
+      Env: [
+        `HTTP_PROXY=${proxyUrl}`,
+        `HTTPS_PROXY=${proxyUrl}`,
+        `http_proxy=${proxyUrl}`,
+        `https_proxy=${proxyUrl}`,
+      ],
       WorkingDir: "/workspace",
     });
+
+    // 4. Start the container
     await this.container.start();
   }
 
@@ -56,6 +89,7 @@ export class DockerExecutor implements Executor {
     const exec = await this.container.exec({
       Cmd: [cmd, ...args],
       WorkingDir: opts?.cwd ?? "/workspace",
+      User: "agent",
       Env: opts?.env
         ? Object.entries(opts.env)
             .filter(([, v]) => v !== undefined)
@@ -121,6 +155,7 @@ export class DockerExecutor implements Executor {
         const exec = await container.exec({
           Cmd: [cmd, ...args],
           WorkingDir: opts?.cwd ?? "/workspace",
+          User: "agent",
           Env: opts?.env
             ? Object.entries(opts.env)
                 .filter(([, v]) => v !== undefined)
@@ -157,9 +192,71 @@ export class DockerExecutor implements Executor {
   }
 
   async cleanup(): Promise<void> {
-    if (!this.container) return;
-    await this.container.stop();
-    await this.container.remove();
+    const config = getConfig();
+    const squidName = config.squid.containerName;
+
+    // 1. Stop and remove the sandbox container
+    if (this.container) {
+      try {
+        await this.container.stop();
+        await this.container.remove();
+      } catch {
+        console.log(
+          `WARN: could not remove sandbox container ${this.getContainerName()}`,
+        );
+      }
+    }
+
+    // 2. Disconnect squid from the network
+    if (this.networkName) {
+      try {
+        await disconnectSquidFromNetwork(
+          this.docker,
+          this.networkName,
+          squidName,
+        );
+      } catch {
+        console.log(
+          `WARN: could not disconnect squid from network ${this.networkName}`,
+        );
+      }
+    }
+
+    // 3. Destroy the run network
+    if (this.runId) {
+      try {
+        await destroyRunNetwork(this.docker, this.runId);
+      } catch {
+        console.log(`WARN: could not remove run network ${this.networkName}`);
+      }
+    }
+  }
+
+  async getHttpLog(
+    startTime: number,
+    endTime: number,
+  ): Promise<HttpRequestEntry[]> {
+    if (!this.container || !this.networkName) return [];
+
+    const config = getConfig();
+    const squidName = config.squid.containerName;
+
+    // Get the sandbox container's IP on the internal network
+    const info = await this.container.inspect();
+    const networkSettings = info.NetworkSettings.Networks[this.networkName!];
+    const clientIp = networkSettings?.IPAddress;
+    if (!clientIp) {
+      console.log(
+        "WARN: could not get sandbox container IP to retrieve HTTP logs",
+      );
+      return [];
+    }
+
+    return parseAccessLog(this.docker, squidName, clientIp, startTime, endTime);
+  }
+
+  getContainerName() {
+    return `claudflow-sandbox-${this.runId}`;
   }
 
   serialize(): SerializedExecutor {

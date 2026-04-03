@@ -40,6 +40,7 @@ export type WorkflowEvent =
   | { type: "node:end"; nodeId: string; durationMs: number }
   | { type: "node:error"; nodeId: string; error: string }
   | { type: "node:interrupted"; nodeId: string }
+  | { type: "node:http"; nodeId: string; requests: HttpRequestEntry[] }
   | {
       type: "run:complete";
       runId: string;
@@ -59,7 +60,6 @@ export interface ScriptedNodeDef {
 export interface ClaudeNodeDef {
   type: "claude";
   prompt: string | ((ctx: RunContext) => string);
-  allowedDomains: string[];
   env: Record<string, string>;
   timeoutMs: number;
   model: string;
@@ -87,6 +87,15 @@ export interface InterruptMetadata {
   reason: "input-required" | "error";
   question?: string;
   nodeData?: unknown;
+}
+
+export interface HttpRequestEntry {
+  timestamp: string;
+  domain: string;
+  port: number;
+  status: "allowed" | "denied";
+  durationMs: number;
+  bytes: number;
 }
 
 export type EdgeTarget = string;

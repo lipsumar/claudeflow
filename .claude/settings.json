@@ -3,7 +3,8 @@
     "allow": [
       "Bash(yarn typecheck:*)",
       "Bash(yarn test:*)",
-      "Bash(yarn build:*)"
+      "Bash(yarn build:*)",
+      "Bash(yarn vitest:*)"
     ]
   }
 }

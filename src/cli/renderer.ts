@@ -6,7 +6,11 @@ import type {
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
-import type { NodeChunk, WorkflowEvent } from "../workflow/types.js";
+import type {
+  HttpRequestEntry,
+  NodeChunk,
+  WorkflowEvent,
+} from "../workflow/types.js";
 
 export function createRenderer(): (event: WorkflowEvent) => void {
   let spinner: Ora | null = null;
@@ -92,6 +96,13 @@ export function createRenderer(): (event: WorkflowEvent) => void {
         break;
       }
 
+      case "node:http": {
+        if (event.requests.length > 0) {
+          console.log(formatHttpSummary(event.requests));
+        }
+        break;
+      }
+
       case "run:complete": {
         console.log();
         if (event.status === "completed") {
@@ -112,6 +123,19 @@ export function createRenderer(): (event: WorkflowEvent) => void {
       }
     }
   };
+}
+
+function formatHttpSummary(requests: HttpRequestEntry[]): string {
+  const allowed = requests.filter((r) => r.status === "allowed");
+  const denied = requests.filter((r) => r.status === "denied");
+  const lines: string[] = [];
+  lines.push(
+    chalk.dim(`http: ${allowed.length} allowed, ${denied.length} denied`),
+  );
+  for (const r of denied) {
+    lines.push(chalk.red(`  ✗ ${r.domain}:${r.port}`));
+  }
+  return lines.join("\n");
 }
 
 function formatChunk(chunk: NodeChunk): string | null {

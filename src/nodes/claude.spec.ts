@@ -37,7 +37,6 @@ function createDef(overrides: Partial<ClaudeNodeDef> = {}): ClaudeNodeDef {
   return {
     type: "claude",
     prompt: "do something",
-    allowedDomains: [],
     env: {},
     timeoutMs: 300_000,
     model: "sonnet",
@@ -59,7 +58,7 @@ function createMockChild(): ChildProcess {
 function createMockExecutor(child: ChildProcess): Executor {
   return {
     workspace: "/tmp/test",
-    async init() {},
+    async init(_runId: string) {},
     async exec() {
       return { stdout: "", stderr: "", exitCode: 0 };
     },
@@ -67,6 +66,9 @@ function createMockExecutor(child: ChildProcess): Executor {
     async cleanup() {},
     serialize() {
       return { type: "mock", workspace: "/tmp/test" };
+    },
+    async getHttpLog() {
+      return [];
     },
   };
 }
@@ -107,6 +109,7 @@ describe("executeClaudeNode", () => {
         "--output-format",
         "stream-json",
         "--verbose",
+        "--dangerously-skip-permissions",
         "hello world",
       ],
       expect.objectContaining({

@@ -40,6 +40,7 @@ const main = defineCommand({
     run: () => import("./commands/run.js").then((m) => m.default),
     runs: () => import("./commands/runs.js").then((m) => m.default),
     resume: () => import("./commands/resume.js").then((m) => m.default),
+    proxy: () => import("./commands/proxy.js").then((m) => m.default),
   },
 });
 

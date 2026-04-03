@@ -12,7 +12,6 @@ import { z, type ZodType } from "zod";
 
 export interface ClaudeNodeOptions {
   prompt: ClaudeNodeDef["prompt"];
-  allowedDomains?: string[];
   env?: Record<string, string>;
   timeoutMs?: number;
   model?: string;
@@ -23,7 +22,6 @@ export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
   return {
     type: "claude",
     prompt: options.prompt,
-    allowedDomains: options.allowedDomains ?? [],
     env: options.env ?? {},
     timeoutMs: options.timeoutMs ?? 300_000,
     model: options.model ?? "sonnet",
@@ -45,6 +43,8 @@ export async function executeClaudeNode(
   if (!getConfig().anthropic.apiKey) {
     throw new Error("Anthropic API key not configured");
   }
+
+  const nodeStartTime = Date.now();
 
   let sessionId: string | null =
     resume.nodeData && resume.nodeData.sessionId
@@ -126,7 +126,18 @@ export async function executeClaudeNode(
 
     proc.on("error", reject);
 
-    proc.on("close", (code) => {
+    proc.on("close", async (code) => {
+      // Emit HTTP log after node completes
+      const nodeEndTime = Date.now();
+      try {
+        const requests = await executor.getHttpLog(nodeStartTime, nodeEndTime);
+        if (requests.length > 0) {
+          emit({ type: "node:http", nodeId, requests });
+        }
+      } catch {
+        // best effort — don't fail the node over log parsing
+      }
+
       if (code === 0) {
         let result: NodeResult = { state: {} };
         if (question) {
@@ -173,6 +184,7 @@ function buildArgs({
     "--output-format",
     "stream-json",
     "--verbose",
+    "--dangerously-skip-permissions",
   ];
   if (jsonSchema) {
     args.push("--json-schema", jsonSchema);

@@ -6,6 +6,7 @@ export { runWorkflow } from "./workflow/engine.js";
 export type {
   ClaudeNodeDef,
   ExecResult,
+  HttpRequestEntry,
   Run,
   RunContext,
   RunOptions,

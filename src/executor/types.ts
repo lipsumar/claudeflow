@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { HttpRequestEntry } from "../workflow/types.js";
 
 export interface ExecOpts {
   cwd?: string;
@@ -24,10 +25,11 @@ export interface SerializedExecutor {
 }
 
 export interface Executor {
-  init(): Promise<void>;
+  init(runId: string): Promise<void>;
   workspace: string;
   exec(cmd: string, args: string[], opts?: ExecOpts): Promise<ExecResult>;
   spawn(cmd: string, args: string[], opts?: SpawnOpts): ChildProcess;
   cleanup(): Promise<void>;
   serialize(): SerializedExecutor;
+  getHttpLog(startTime: number, endTime: number): Promise<HttpRequestEntry[]>;
 }

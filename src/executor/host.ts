@@ -4,6 +4,7 @@ import {
   spawn as cpSpawn,
   type ChildProcess,
 } from "node:child_process";
+import type { HttpRequestEntry } from "../workflow/types.js";
 import type {
   Executor,
   ExecOpts,
@@ -19,7 +20,7 @@ export class HostExecutor implements Executor {
     this.workspace = workspace;
   }
 
-  async init(): Promise<void> {
+  async init(_runId: string): Promise<void> {
     mkdirSync(this.workspace, { recursive: true });
   }
 
@@ -65,6 +66,14 @@ export class HostExecutor implements Executor {
 
   async cleanup(): Promise<void> {
     // Host executor doesn't need cleanup — workspace persists on disk
+  }
+
+  async getHttpLog(
+    _startTime: number,
+    _endTime: number,
+  ): Promise<HttpRequestEntry[]> {
+    // host executor doesn't track http requests - no proxy
+    return [];
   }
 
   serialize(): SerializedExecutor {

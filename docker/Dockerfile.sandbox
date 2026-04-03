@@ -10,10 +10,12 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN useradd -m -s /bin/bash agent
 RUN mkdir -p /workspace && chown agent:agent /workspace
 
-USER agent
-
 # Pre-accept Claude Code terms so --print doesn't block on first run
 RUN mkdir -p /home/agent/.claude && \
-    echo '{"hasCompletedOnboarding":true}' > /home/agent/.claude/settings.json
+    echo '{"hasCompletedOnboarding":true}' > /home/agent/.claude/settings.json && \
+    chown -R agent:agent /home/agent/.claude
 
+USER agent
 WORKDIR /workspace
+
+CMD ["sleep", "infinity"]
