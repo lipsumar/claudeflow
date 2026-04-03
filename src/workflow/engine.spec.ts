@@ -310,7 +310,6 @@ describe("runWorkflow", () => {
       new Workflow({ name: "test", executor: "host" }).addNode(
         "claude",
         claudeNode({
-          image: "test:latest",
           prompt: "do something",
         }),
       ),
