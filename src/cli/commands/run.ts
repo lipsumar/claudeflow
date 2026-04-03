@@ -68,6 +68,7 @@ export default defineCommand({
   },
 });
 
+// TODO: make sure we're in TTY env to prompt
 async function resolveInputs(
   workflow: Awaited<ReturnType<typeof loadWorkflow>>,
 ): Promise<Record<string, unknown>> {
