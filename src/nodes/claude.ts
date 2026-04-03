@@ -8,14 +8,15 @@ import type {
 } from "../workflow/types.js";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeProcess } from "./claude-process.js";
+import { z, type ZodType } from "zod";
 
 export interface ClaudeNodeOptions {
-  image: string;
   prompt: ClaudeNodeDef["prompt"];
   allowedDomains?: string[];
   env?: Record<string, string>;
   timeoutMs?: number;
   model?: string;
+  storeOutputAs?: string | { key: string; schema: ZodType };
 }
 
 export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
@@ -26,6 +27,7 @@ export function claudeNode(options: ClaudeNodeOptions): ClaudeNodeDef {
     env: options.env ?? {},
     timeoutMs: options.timeoutMs ?? 300_000,
     model: options.model ?? "sonnet",
+    storeOutputAs: options.storeOutputAs,
   };
 }
 
@@ -66,12 +68,19 @@ export async function executeClaudeNode(
     ...def.env,
   };
 
+  let jsonSchema: string | null = null;
+  if (def.storeOutputAs && typeof def.storeOutputAs !== "string") {
+    const { $schema, ...schema } = z.toJSONSchema(def.storeOutputAs.schema);
+    jsonSchema = JSON.stringify(schema);
+  }
+
   const child = executor.spawn(
     "claude",
     buildArgs({
       prompt,
       model: def.model,
       sessionId,
+      jsonSchema,
     }),
     {
       env,
@@ -82,6 +91,8 @@ export async function executeClaudeNode(
   const proc = new ClaudeProcess(child);
 
   let question: string | null = null;
+  let resultOutput: string | null = null;
+  let structuredOutput: unknown = null;
   return new Promise((resolve, reject) => {
     proc.on("message", (message) => {
       emit({
@@ -93,6 +104,13 @@ export async function executeClaudeNode(
       if (containsToolUse(message, "AskUserQuestion")) {
         sessionId = message.session_id;
         question = extractAskUserQuestion(message);
+      }
+
+      if (message.type === "result" && message.subtype === "success") {
+        resultOutput = message.result;
+        if (message.structured_output !== undefined) {
+          structuredOutput = (message as any).structured_output;
+        }
       }
     });
 
@@ -108,7 +126,7 @@ export async function executeClaudeNode(
 
     proc.on("close", (code) => {
       if (code === 0) {
-        let result: NodeResult = {};
+        let result: NodeResult = { state: {} };
         if (question) {
           result.interrupted = true;
           result.interruptMetadata = {
@@ -116,6 +134,16 @@ export async function executeClaudeNode(
             nodeData: { sessionId },
             question,
           };
+        }
+        if (
+          def.storeOutputAs &&
+          (resultOutput !== null || structuredOutput !== null)
+        ) {
+          if (typeof def.storeOutputAs === "string") {
+            result.state![def.storeOutputAs] = resultOutput;
+          } else {
+            result.state![def.storeOutputAs.key] = structuredOutput;
+          }
         }
         resolve(result);
       } else {
@@ -129,10 +157,12 @@ function buildArgs({
   prompt,
   model,
   sessionId,
+  jsonSchema,
 }: {
   prompt: string;
   model: string;
   sessionId: string | null;
+  jsonSchema: string | null;
 }) {
   const args = [
     "--print",
@@ -142,6 +172,9 @@ function buildArgs({
     "stream-json",
     "--verbose",
   ];
+  if (jsonSchema) {
+    args.push("--json-schema", jsonSchema);
+  }
   if (sessionId) {
     args.push("--resume", sessionId);
   }

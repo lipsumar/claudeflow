@@ -19,6 +19,7 @@ import {
   containsToolUse,
   extractAskUserQuestion,
 } from "./claude.js";
+import z from "zod";
 
 function createCtx(state: Record<string, unknown> = {}): RunContext {
   return {
@@ -128,7 +129,7 @@ describe("executeClaudeNode", () => {
     child.emit("close", 0);
     const result = await promise;
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ state: {} });
   });
 
   it("rejects on non-zero exit code", async () => {
@@ -271,6 +272,59 @@ describe("executeClaudeNode", () => {
     child.emit("error", new Error("spawn failed"));
 
     await expect(promise).rejects.toThrow("spawn failed");
+  });
+
+  it("returns raw output in state when using storeOutputAs string", async () => {
+    const promise = executeClaudeNode(
+      createDef({ storeOutputAs: "the_output" }),
+      "node-1",
+      createCtx(),
+      executor,
+      emit,
+      {},
+    );
+
+    const msg = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "the final claude output",
+      stop_reason: "end_turn",
+    });
+    child.stdout!.emit("data", Buffer.from(msg, "utf8"));
+    child.emit("close", 0);
+    const result = await promise;
+
+    expect(result).toEqual({
+      state: { the_output: "the final claude output" },
+    });
+  });
+
+  it("returns structured output in state when using storeOutputAs schema", async () => {
+    const promise = executeClaudeNode(
+      createDef({ storeOutputAs: { key: "answer", schema: z.int() } }),
+      "node-1",
+      createCtx(),
+      executor,
+      emit,
+      {},
+    );
+
+    const msg = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "",
+      structured_output: 4,
+      stop_reason: "end_turn",
+    });
+    child.stdout!.emit("data", Buffer.from(msg, "utf8"));
+    child.emit("close", 0);
+    const result = await promise;
+
+    expect(result).toEqual({
+      state: { answer: 4 },
+    });
   });
 });
 

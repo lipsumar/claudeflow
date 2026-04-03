@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { ZodObject } from "zod";
+import type { ZodObject, ZodType } from "zod";
 import type { Executor, ExecResult } from "../executor/types.js";
 import type { Workflow } from "./workflow.js";
 
@@ -63,6 +63,7 @@ export interface ClaudeNodeDef {
   env: Record<string, string>;
   timeoutMs: number;
   model: string;
+  storeOutputAs?: string | { key: string; schema: ZodType };
 }
 
 export interface InterruptNodeDef {
