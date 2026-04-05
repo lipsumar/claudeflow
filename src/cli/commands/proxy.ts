@@ -4,11 +4,12 @@ import { defineCommand } from "citty";
 import Docker from "dockerode";
 import { getConfig } from "../../config.js";
 import {
-  ensureSquidRunning,
+  isContainerRunning,
   writeAclFile,
   writeSquidConf,
   reconfigureSquid,
 } from "../../sandbox/proxy.js";
+import ora from "ora";
 
 function getComposeFile(): string {
   const pkgDir = dirname(require.resolve("../../package.json"));
@@ -17,12 +18,16 @@ function getComposeFile(): string {
 
 function dockerCompose(
   args: string[],
+  env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string }> {
   const composeFile = getComposeFile();
   return new Promise((resolve, reject) => {
     execFile(
       "docker",
       ["compose", "-f", composeFile, ...args],
+      {
+        env: { ...process.env, ...env },
+      },
       (error, stdout, stderr) => {
         if (error) {
           reject(
@@ -45,8 +50,20 @@ const start = defineCommand({
     const config = getConfig();
     const docker = new Docker();
 
-    console.log("Starting Squid proxy...");
-    await dockerCompose(["up", "-d", "squid"]);
+    if (!config.anthropic.apiKey) {
+      throw new Error(
+        "Anthropic API key not configured. Set it in ~/.claudeflow/claudeflow.config.ts",
+      );
+    }
+
+    const spinner = ora({
+      text: "Starting proxies...",
+      discardStdin: false,
+    }).start();
+
+    await dockerCompose(["up", "-d", "squid", "auth-proxy"], {
+      ANTHROPIC_API_KEY: config.anthropic.apiKey,
+    });
 
     // Wait briefly for container to be ready
     //TODO: we can do better than a timeout
@@ -55,7 +72,6 @@ const start = defineCommand({
     const containerName = config.squid.containerName;
 
     // Write squid.conf
-    console.log("Writing config...");
     await writeSquidConf(docker, containerName);
 
     // Write ACL file
@@ -65,7 +81,7 @@ const start = defineCommand({
     // Reconfigure squid
     await reconfigureSquid(docker, containerName);
 
-    console.log("Squid proxy is running.");
+    spinner.succeed("Proxies running");
     console.log(`  Allowed domains: ${domains.join(", ")}`);
   },
 });
@@ -73,52 +89,72 @@ const start = defineCommand({
 const stop = defineCommand({
   meta: {
     name: "stop",
-    description: "Stop the Squid proxy",
+    description: "Stop the proxies",
   },
   async run() {
-    console.log("Stopping Squid proxy...");
+    const spinner = ora({
+      text: "Stopping proxies...",
+      discardStdin: true,
+    });
     await dockerCompose(["down"]);
-    console.log("Squid proxy stopped.");
+    spinner.succeed("Proxies stopped");
   },
 });
 
 const status = defineCommand({
   meta: {
     name: "status",
-    description: "Show Squid proxy status",
+    description: "Show proxy status",
   },
   async run() {
     const config = getConfig();
     const docker = new Docker();
-    const containerName = config.squid.containerName;
 
-    const running = await ensureSquidRunning(docker, containerName);
-    if (!running) {
+    // Squid proxy status
+    const squidRunning = await isContainerRunning(
+      docker,
+      config.squid.containerName,
+    );
+    if (squidRunning) {
+      console.log("Squid proxy is running.");
+      console.log(
+        `  Allowed domains: ${config.squid.allowedDomains.join(", ")}`,
+      );
+
+      try {
+        const container = docker.getContainer(config.squid.containerName);
+        const info = await container.inspect();
+        const networks = Object.keys(info.NetworkSettings.Networks);
+        const runNetworks = networks.filter((n) =>
+          n.startsWith("claudeflow-run-"),
+        );
+        if (runNetworks.length > 0) {
+          console.log(`  Active run networks: ${runNetworks.join(", ")}`);
+        } else {
+          console.log("  No active run networks.");
+        }
+      } catch {
+        // best effort
+      }
+    } else {
       console.log("Squid proxy is not running.");
-      console.log("  Start with: claudeflow proxy start");
-      return;
     }
 
-    console.log("Squid proxy is running.");
-
-    // Show allowed domains
-    console.log(`  Allowed domains: ${config.squid.allowedDomains.join(", ")}`);
-
-    // Show connected networks
-    try {
-      const container = docker.getContainer(containerName);
-      const info = await container.inspect();
-      const networks = Object.keys(info.NetworkSettings.Networks);
-      const runNetworks = networks.filter((n) =>
-        n.startsWith("claudeflow-run-"),
+    // Auth proxy status
+    const authProxyRunning = await isContainerRunning(
+      docker,
+      config.authProxy.containerName,
+    );
+    if (authProxyRunning) {
+      console.log(
+        `Auth proxy is running. (port ${config.authProxy.port})`,
       );
-      if (runNetworks.length > 0) {
-        console.log(`  Active run networks: ${runNetworks.join(", ")}`);
-      } else {
-        console.log("  No active run networks.");
-      }
-    } catch {
-      // best effort
+    } else {
+      console.log("Auth proxy is not running.");
+    }
+
+    if (!squidRunning || !authProxyRunning) {
+      console.log("\n  Start with: claudeflow proxy start");
     }
   },
 });

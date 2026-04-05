@@ -58,7 +58,7 @@ async function dockerExecStdin(
   await new Promise<void>((resolve) => stream.on("end", resolve));
 }
 
-export async function ensureSquidRunning(
+export async function isContainerRunning(
   docker: Docker,
   containerName: string,
 ): Promise<boolean> {

@@ -17,6 +17,8 @@ import {
   destroyRunNetwork,
   connectSquidToNetwork,
   disconnectSquidFromNetwork,
+  connectContainerToNetwork,
+  disconnectContainerFromNetwork,
 } from "../sandbox/network.js";
 import { parseAccessLog } from "../sandbox/proxy.js";
 
@@ -42,6 +44,7 @@ export class DockerExecutor implements Executor {
     this.runId = runId;
     const config = getConfig();
     const squidName = config.squid.containerName;
+    const authProxyName = config.authProxy.containerName;
 
     // 1. Create internal network
     this.networkName = await createRunNetwork(this.docker, runId);
@@ -53,9 +56,16 @@ export class DockerExecutor implements Executor {
       squidName,
     );
 
+    // 3. Connect auth-proxy to the network (reachable by container name)
+    await connectContainerToNetwork(
+      this.docker,
+      this.networkName,
+      authProxyName,
+    );
+
     const proxyUrl = `http://${this.squidGatewayIp}:${config.squid.port}`;
 
-    // 3. Create container on the internal network
+    // 4. Create container on the internal network
     this.container = await this.docker.createContainer({
       name: this.getContainerName(),
       Image: this.image,
@@ -69,11 +79,14 @@ export class DockerExecutor implements Executor {
         `HTTPS_PROXY=${proxyUrl}`,
         `http_proxy=${proxyUrl}`,
         `https_proxy=${proxyUrl}`,
+        // auth-proxy should not go through squid
+        `NO_PROXY=${authProxyName}`,
+        `no_proxy=${authProxyName}`,
       ],
       WorkingDir: "/workspace",
     });
 
-    // 4. Start the container
+    // 5. Start the container
     await this.container.start();
   }
 
@@ -194,6 +207,7 @@ export class DockerExecutor implements Executor {
   async cleanup(): Promise<void> {
     const config = getConfig();
     const squidName = config.squid.containerName;
+    const authProxyName = config.authProxy.containerName;
 
     // 1. Stop and remove the sandbox container
     if (this.container) {
@@ -207,7 +221,7 @@ export class DockerExecutor implements Executor {
       }
     }
 
-    // 2. Disconnect squid from the network
+    // 2. Disconnect squid and auth-proxy from the network
     if (this.networkName) {
       try {
         await disconnectSquidFromNetwork(
@@ -218,6 +232,17 @@ export class DockerExecutor implements Executor {
       } catch {
         console.log(
           `WARN: could not disconnect squid from network ${this.networkName}`,
+        );
+      }
+      try {
+        await disconnectContainerFromNetwork(
+          this.docker,
+          this.networkName,
+          authProxyName,
+        );
+      } catch {
+        console.log(
+          `WARN: could not disconnect auth-proxy from network ${this.networkName}`,
         );
       }
     }

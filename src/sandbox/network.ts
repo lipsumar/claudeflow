@@ -25,14 +25,48 @@ export async function destroyRunNetwork(
   await network.remove();
 }
 
+export async function connectContainerToNetwork(
+  docker: Docker,
+  networkName: string,
+  containerName: string,
+): Promise<void> {
+  const network = docker.getNetwork(networkName);
+  await network.connect({ Container: containerName });
+}
+
+export async function disconnectContainerFromNetwork(
+  docker: Docker,
+  networkName: string,
+  containerName: string,
+): Promise<void> {
+  const network = docker.getNetwork(networkName);
+  await network.disconnect({ Container: containerName });
+}
+
+export async function getContainerIpOnNetwork(
+  docker: Docker,
+  networkName: string,
+  containerName: string,
+): Promise<string> {
+  const container = docker.getContainer(containerName);
+  const info = await container.inspect();
+  const networkSettings = info.NetworkSettings.Networks[networkName];
+  if (!networkSettings?.IPAddress) {
+    throw new Error(
+      `Container ${containerName} has no IP on network ${networkName}`,
+    );
+  }
+  return networkSettings.IPAddress;
+}
+
+// Convenience wrappers kept for backwards compat
 export async function connectSquidToNetwork(
   docker: Docker,
   networkName: string,
   squidContainerName: string,
 ): Promise<string> {
-  const network = docker.getNetwork(networkName);
-  await network.connect({ Container: squidContainerName });
-  return getSquidIpOnNetwork(docker, networkName, squidContainerName);
+  await connectContainerToNetwork(docker, networkName, squidContainerName);
+  return getContainerIpOnNetwork(docker, networkName, squidContainerName);
 }
 
 export async function disconnectSquidFromNetwork(
@@ -40,22 +74,5 @@ export async function disconnectSquidFromNetwork(
   networkName: string,
   squidContainerName: string,
 ): Promise<void> {
-  const network = docker.getNetwork(networkName);
-  await network.disconnect({ Container: squidContainerName });
-}
-
-export async function getSquidIpOnNetwork(
-  docker: Docker,
-  networkName: string,
-  squidContainerName: string,
-): Promise<string> {
-  const container = docker.getContainer(squidContainerName);
-  const info = await container.inspect();
-  const networkSettings = info.NetworkSettings.Networks[networkName];
-  if (!networkSettings?.IPAddress) {
-    throw new Error(
-      `Squid container ${squidContainerName} has no IP on network ${networkName}`,
-    );
-  }
-  return networkSettings.IPAddress;
+  await disconnectContainerFromNetwork(docker, networkName, squidContainerName);
 }

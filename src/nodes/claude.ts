@@ -63,8 +63,11 @@ export async function executeClaudeNode(
   }
 
   const config = getConfig();
+  const authProxyUrl = `http://${config.authProxy.containerName}:${config.authProxy.port}`;
   const env: Record<string, string | undefined> = {
-    ANTHROPIC_API_KEY: config.anthropic.apiKey,
+    ANTHROPIC_API_KEY: "dummy",
+    ANTHROPIC_BASE_URL: authProxyUrl,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     ...def.env,
   };
 

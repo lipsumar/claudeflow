@@ -17,7 +17,8 @@
     "build": "tsdown",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "build:sandbox": "docker build -t claudeflow-sandbox -f docker/Dockerfile.sandbox docker"
+    "build:sandbox": "docker build -t claudeflow-sandbox -f docker/Dockerfile.sandbox docker",
+    "build:auth-proxy": "docker build -t claudeflow-auth-proxy -f docker/Dockerfile.auth-proxy docker"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.77",

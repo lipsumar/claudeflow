@@ -11,6 +11,7 @@ import type {
 vi.mock("../config.js", () => ({
   getConfig: () => ({
     anthropic: { apiKey: "test-key" },
+    authProxy: { containerName: "claudeflow-auth-proxy", port: 4128 },
   }),
 }));
 
@@ -113,7 +114,10 @@ describe("executeClaudeNode", () => {
         "hello world",
       ],
       expect.objectContaining({
-        env: expect.objectContaining({ ANTHROPIC_API_KEY: "test-key" }),
+        env: expect.objectContaining({
+          ANTHROPIC_API_KEY: "dummy",
+          ANTHROPIC_BASE_URL: "http://claudeflow-auth-proxy:4128",
+        }),
         stdio: ["ignore", "pipe", "pipe"],
       }),
     );
